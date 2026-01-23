@@ -13,6 +13,10 @@ Welcome! This SDK allows you to integrate your native Android projects with Cogn
 
 Please join our [Discord](https://discord.gg/x38sNUdDRH) for community support.
 
+## License
+
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+
 ## Quickstart
 
 ### Installation
