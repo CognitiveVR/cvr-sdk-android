@@ -169,3 +169,6 @@ Open the generated `cognitive3d.json` and update the following values:
 | `scene_settings.id` | Your scene ID from the Cognitive3D dashboard |
 | `scene_settings.version` | Your scene version number |
 | `scene_settings.path` | Your main activity path (e.g., `com.myapp.MainActivity`) |
+
+
+test
