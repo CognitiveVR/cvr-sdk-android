@@ -33,12 +33,12 @@ object GazeManager {
                 val startTime = System.currentTimeMillis()
                 val pose = getHeadPose()
 
-                val position = pose.translation
-                val rotation = pose.rotation
+                val pos = pose.translation
+                val rot = pose.rotation
 
                 Serialization.recordGaze(
-                    floatArrayOf(position.x, position.y, position.z),
-                    floatArrayOf(rotation.x, rotation.y, rotation.z, rotation.w),
+                    pos.x, pos.y, pos.z,
+                    rot.x, rot.y, rot.z, rot.w,
                     startTime.toDouble() / 1000.0
                 )
 
