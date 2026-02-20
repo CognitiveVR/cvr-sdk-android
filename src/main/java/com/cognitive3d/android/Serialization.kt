@@ -519,17 +519,16 @@ object Serialization {
 
     fun initializeSensor(sensorName: String, hzRate: Float) {
         if (!isInitialized) return
-        if (!sensorDataMap.containsKey(sensorName)) {
-            sensorDataMap[sensorName] = SensorData(hzRate)
-        }
+        // Use putIfAbsent for an atomic check-and-put operation
+        sensorDataMap.putIfAbsent(sensorName, SensorData(hzRate))
     }
 
     suspend fun recordSensor(category: String, value: Float, timestamp: Double) {
         if (!isInitialized) return
         
-        initializeSensor(category, 10f)
-        
         val payload = sensorMutex.withLock {
+            initializeSensor(category, 10f)
+            
             val list = cachedSnapshots.getOrPut(category) { mutableListOf() }
             list.add(SensorReading(timestamp, value))
             sensorCount++
