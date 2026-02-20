@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
 import androidx.xr.runtime.Session
 import androidx.xr.scenecore.Entity
 
@@ -17,10 +18,15 @@ object Cognitive3DManager {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
+    
+    // Channel for high-frequency sensor data
+    private val sensorChannel = Channel<SensorPoint>(capacity = Channel.UNLIMITED)
+    private var sensorProcessorJob: Job? = null
+
+    private data class SensorPoint(val category: String, val value: Float, val timestamp: Double)
 
     /**
      * Initializes global session metadata.
-     * Should be called once at application start.
      */
     @JvmStatic
     fun initSession(session: Session)
@@ -41,28 +47,19 @@ object Cognitive3DManager {
         startSession(session)
     }
 
-    /**
-     * Starts the Cognitive3D session and begins recording.
-     * 
-     * @param session The active XR Session.
-     */
     @JvmStatic
     fun startSession(session: Session)
     {
         Log.d(Util.TAG, "Cognitive3D Session Started")
         val context = session.activity.applicationContext
 
+        startSensorProcessor()
+
         scope.launch {
-            // Set Initial Session Properties (Device Metadata)
             setInternalSessionProperties(context)
-
-            // Serialize Session Start Event
             Serialization.serializeCustomEvents("c3d.sessionStart", emptyMap())
-
-            // Force an initial flush so the Start event and Metadata go out immediately
             Serialization.flush()
 
-            // Start Recording loops
             try {
                 GazeManager.startGazeRecording(scope, session)
                 DynamicManager.startDynamicRecording(scope, session)
@@ -74,34 +71,30 @@ object Cognitive3DManager {
         }
     }
 
-    /**
-     * Pauses the Cognitive3D recording and flushes pending data.
-     * Call this in your Activity's onPause().
-     */
+    private fun startSensorProcessor() {
+        sensorProcessorJob?.cancel()
+        sensorProcessorJob = scope.launch {
+            for (point in sensorChannel) {
+                Serialization.recordSensor(point.category, point.value, point.timestamp)
+            }
+        }
+    }
+
     @JvmStatic
     fun pauseSession() {
         Log.d(Util.TAG, "Cognitive3D Session Paused")
         
-        // Stop recording loops
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
         stopFlushTimer()
 
         scope.launch {
-            // Record current state of dynamic objects before flushing
             DynamicManager.recordFinalDynamics()
-            // Flush all pending data buffers immediately
             Serialization.flush()
         }
     }
 
-    /**
-     * Resumes Cognitive3D recording.
-     * Call this in your Activity's onResume().
-     * 
-     * @param session The active XR Session.
-     */
     @JvmStatic
     fun resumeSession(session: Session) {
         Log.d(Util.TAG, "Cognitive3D Session Resumed")
@@ -111,16 +104,11 @@ object Cognitive3DManager {
         startFlushTimer()
     }
 
-    /**
-     * Ends the Cognitive3D session and sends final session data.
-     * Call this when the user is done with the experience.
-     */
     @JvmStatic
     fun endSession()
     {
         Log.d(Util.TAG, "Cognitive3D Session Ending")
         
-        // Stop recording loops
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
@@ -134,20 +122,15 @@ object Cognitive3DManager {
         properties["Reason"] = "Quit from within app"
 
         scope.launch {
-            // Record the last known state of all dynamic objects
             DynamicManager.recordFinalDynamics()
-            
-            // Send session end event
             Serialization.serializeCustomEvents("c3d.sessionEnd", properties)
-
-            // Final flush to send all remaining data before closing
             Serialization.flush()
+            
+            sensorProcessorJob?.cancel()
+            sensorProcessorJob = null
         }
     }
 
-    /**
-     * Starts the periodic flush timer based on the configuration.
-     */
     private fun startFlushTimer() {
         val interval = config?.automaticSendTimer ?: 10
         if (interval <= 0) return
@@ -161,17 +144,11 @@ object Cognitive3DManager {
         }
     }
 
-    /**
-     * Stops the periodic flush timer.
-     */
     private fun stopFlushTimer() {
         flushTimerJob?.cancel()
         flushTimerJob = null
     }
 
-    /**
-     * Gathers and sets hardware and application metadata for the session.
-     */
     private fun setInternalSessionProperties(context: Context)
     {
         val packageManager = context.packageManager
@@ -184,7 +161,6 @@ object Cognitive3DManager {
             "Unknown"
         }
 
-        // App & SDK Info
         setSessionProperty("c3d.version", "1.0.0")
         setSessionProperty("c3d.app.engine", "Android Native")
         setSessionProperty("c3d.app.engine.version", "Android SDK " + Build.VERSION.SDK_INT)
@@ -194,20 +170,16 @@ object Cognitive3DManager {
         setSessionProperty("c3d.app.inEditor", false)
         setSessionProperty("c3d.app.name", appName)
 
-        // Device ID & Type
         setSessionProperty("c3d.deviceid", Serialization.userID)
         setSessionProperty("c3d.device.type", "Mobile")
         setSessionProperty("c3d.device.model", Build.MODEL ?: "Unknown")
         
-        // Device Hardware
         setSessionProperty("c3d.device.os", "Android OS " + Build.VERSION.RELEASE)
         setSessionProperty("c3d.device.cpu", Build.HARDWARE ?: "Unknown")
         setSessionProperty("c3d.device.cpu.vendor", Build.MANUFACTURER ?: "Unknown")
         
-        // Memory
         setSessionProperty("c3d.device.memory", 0.0) 
 
-        // GPU Info
         val gpuInfo = Util.getGpuInfo()
         if (gpuInfo.isNotEmpty()) {
             setSessionProperty("c3d.device.gpu", gpuInfo["renderer"] ?: "Unknown")
@@ -217,42 +189,24 @@ object Cognitive3DManager {
             setSessionProperty("c3d.device.gpu.vendor", "Unknown")
         }
 
-        // Capabilities
         setSessionProperty("c3d.device.hmd.type", Build.MODEL ?: "Unknown")
         setSessionProperty("c3d.device.eyetracking.enabled", false)
         setSessionProperty("c3d.device.controllerinputs.enabled", false)
         setSessionProperty("c3d.app.handtracking.enabled", true)
     }
 
-    /**
-     * Sets a global property for the current session.
-     * 
-     * @param key The property name.
-     * @param value The property value.
-     */
     @JvmStatic
     fun setSessionProperty(key: String, value: Any)
     {
         Serialization.setSessionProperty(key, value)
     }
 
-    /**
-     * Sets a property specific to the participant (user).
-     *
-     * @param key The property name (prefixed with 'c3d.participant.').
-     * @param value The property value.
-     */
     @JvmStatic
     fun setParticipantProperty(key: String, value: Any)
     {
         Serialization.setSessionProperty("c3d.participant.$key", value)
     }
 
-    /**
-     * Sets the full name of the participant and updates the session name.
-     *
-     * @param name The participant's full name.
-     */
     @JvmStatic
     fun setParticipantFullName(name: String)
     {
@@ -265,11 +219,6 @@ object Cognitive3DManager {
         setSessionProperty("c3d.sessionname", name)
     }
 
-    /**
-     * Sets a unique identifier for the participant.
-     *
-     * @param id The participant's unique ID.
-     */
     @JvmStatic
     fun setParticipantId(id: String)
     {
@@ -281,12 +230,6 @@ object Cognitive3DManager {
         setParticipantProperty("id", id)
     }
 
-    /**
-     * Sends a custom event with optional properties to the dashboard.
-     *
-     * @param category The event category/name.
-     * @param properties Optional key-value pairs associated with the event.
-     */
     @JvmStatic
     @JvmOverloads
     fun sendCustomEvent(category: String, properties: Map<String, Any?> = emptyMap())
@@ -297,26 +240,14 @@ object Cognitive3DManager {
     }
 
     /**
-     * Records a sensor data point.
-     *
-     * @param category The name of the sensor (e.g. "HeartRate", "Battery").
-     * @param value The numerical value to record.
+     * Records a sensor data point using an efficient channel.
      */
     @JvmStatic
     fun recordSensor(category: String, value: Float) {
         val timestamp = System.currentTimeMillis().toDouble() / 1000.0
-        scope.launch {
-            Serialization.recordSensor(category, value, timestamp)
-        }
+        sensorChannel.trySend(SensorPoint(category, value, timestamp))
     }
 
-    /**
-     * Registers an Entity as a dynamic object for tracking movement and state.
-     *
-     * @param name The display name of the object.
-     * @param meshName The name of the mesh associated with this object.
-     * @param entity The Scenecore Entity to track.
-     */
     @JvmStatic
     fun registerDynamicObject(name: String, meshName: String, entity: Entity?) {
         for (obj in DynamicManager.dynamics) {
@@ -336,14 +267,9 @@ object Cognitive3DManager {
         DynamicManager.registerDynamicObject(obj)
     }
 
-    /**
-     * Unregisters a previously registered dynamic entity.
-     *
-     * @param entity The Scenecore Entity to stop tracking.
-     */
     @JvmStatic
     fun unregisterDynamicObject(entity: Entity?) {
-        if (entity == null) return // Prevent accidental unregistration of hands/controllers
+        if (entity == null) return
 
         val iterator = DynamicManager.dynamics.iterator()
         while (iterator.hasNext()) {
