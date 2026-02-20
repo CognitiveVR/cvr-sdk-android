@@ -15,6 +15,7 @@ import androidx.xr.runtime.Session
 import androidx.xr.scenecore.Entity
 
 object Cognitive3DManager {
+    private const val SDK_VERSION: String = "1.0.2"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
@@ -201,7 +202,7 @@ object Cognitive3DManager {
         }
 
         // App & SDK Info
-        setSessionProperty("c3d.version", "1.0.2")
+        setSessionProperty("c3d.version", SDK_VERSION)
         setSessionProperty("c3d.app.engine", "Android Native")
         setSessionProperty("c3d.app.engine.version", "Android SDK " + Build.VERSION.SDK_INT)
         setSessionProperty("c3d.app.version", appVersion)
