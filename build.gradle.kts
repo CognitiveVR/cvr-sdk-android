@@ -21,6 +21,16 @@ android {
         kotlinCompilerExtensionVersion = "1.5.11"
     }
 
+    flavorDimensions += "xrVersion"
+    productFlavors {
+        create("xrAlpha09") {
+            dimension = "xrVersion"
+        }
+        create("xrAlpha10") {
+            dimension = "xrVersion"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -51,10 +61,17 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.8.2")
 
-    implementation("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
-    implementation("androidx.xr.runtime:runtime:1.0.0-alpha10")
-    implementation("androidx.xr.compose:compose:1.0.0-alpha09")
-    implementation("androidx.xr.arcore:arcore:1.0.0-alpha10")
+    // XR Alpha 09 specific
+    "xrAlpha09Implementation"("androidx.xr.compose:compose:1.0.0-alpha09")
+    "xrAlpha09Implementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha09")
+    "xrAlpha09Implementation"("androidx.xr.runtime:runtime:1.0.0-alpha09")
+    "xrAlpha09Implementation"("androidx.xr.arcore:arcore:1.0.0-alpha09")
+
+    // XR Alpha 10 specific
+    "xrAlpha10Implementation"("androidx.xr.compose:compose:1.0.0-alpha10")
+    "xrAlpha10Implementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
+    "xrAlpha10Implementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
+    "xrAlpha10Implementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
 }
 
 // Helper function to get properties with defaults
@@ -68,6 +85,13 @@ mavenPublishing {
         getProperty("POM_ARTIFACT_ID"),
         getProperty("VERSION_NAME")
     )
+
+    // Publishing the xrAlpha09 variant to Maven Central as the primary SDK
+    configure(com.vanniktech.maven.publish.AndroidSingleVariantLibrary(
+        variant = "xrAlpha09Release",
+        sourcesJar = true,
+        publishJavadocJar = true
+    ))
 
     pom {
         name.set(getProperty("POM_NAME"))
