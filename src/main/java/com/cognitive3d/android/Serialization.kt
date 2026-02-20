@@ -207,6 +207,9 @@ object Serialization {
         }
     }
 
+    /**
+     * Records a single gaze snapshot, typically representing the user's head pose.
+     */
     suspend fun recordGaze(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, timestamp: Double) {
         if (!isInitialized) return
         
@@ -462,6 +465,9 @@ object Serialization {
         dynamicManifestBuilder.append('}')
     }
 
+    /**
+     * Records a snapshot of a dynamic object's state, including its position, rotation, and scale.
+     */
     suspend fun recordDynamic(id: String, time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, sx: Float, sy: Float, sz: Float, hasScale: Boolean, properties: String?) {
         if (!isInitialized) return
         
@@ -586,6 +592,10 @@ object Serialization {
         return sensorBuilder.toString()
     }
 
+    /**
+     * Records the position and orientation of the tracking space.
+     * This is typically the headset's pose in the real world.
+     */
     suspend fun recordTrackingSpace(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, timestamp: Double) {
         if (!isInitialized) return
         val payload = boundaryMutex.withLock {
