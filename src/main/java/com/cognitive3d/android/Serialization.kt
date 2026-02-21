@@ -122,19 +122,26 @@ object Serialization {
         resetSensors()
         resetBoundary()
         
-        isInitialized = true
-        
         CoroutineScope(Dispatchers.IO).launch {
             initializationMutex.withLock {
+                // Process pending custom events
                 if (pendingCustomEvents.isNotEmpty()) {
                     val eventsToProcess = pendingCustomEvents.toList()
                     pendingCustomEvents.clear()
-                    eventsToProcess.forEach { (category, properties, storedPose) ->
-                        val finalPose = storedPose?.toLeftHanded() ?: GazeManager.getHeadPose()
-                        serializeCustomEventsInternal(category, properties, finalPose)
+                    
+                    val payloads = eventMutex.withLock {
+                        eventsToProcess.mapNotNull { (category, properties, storedPose) ->
+                            val finalPose = storedPose?.toLeftHanded() ?: GazeManager.getHeadPose()
+                            serializeCustomEventsInternal(category, properties, finalPose)
+                        }
+                    }
+                    
+                    payloads.forEach { payload ->
+                        NetworkManager.send(eventURL, payload)
                     }
                 }
 
+                // Process pending dynamic manifests
                 if (pendingDynamicManifests.isNotEmpty()) {
                     val manifestsToProcess = pendingDynamicManifests.toList()
                     pendingDynamicManifests.clear()
@@ -144,6 +151,9 @@ object Serialization {
                         }
                     }
                 }
+                
+                // Set isInitialized only after all pending data has been processed.
+                isInitialized = true
             }
         }
     }
@@ -189,6 +199,7 @@ object Serialization {
 
     private fun resetSensors() {
         cachedSnapshots.clear()
+        sensorDataMap.clear()
         sensorCount = 0
     }
 
@@ -267,10 +278,15 @@ object Serialization {
         
         append(integerPart).append('.')
         
-        if (fractionalPart < 1000) append('0')
-        if (fractionalPart < 100) append('0')
-        if (fractionalPart < 10) append('0')
-        return append(fractionalPart)
+        if (fractionalPart == 0L) {
+            append("0000")
+        } else {
+            if (fractionalPart < 1000) append('0')
+            if (fractionalPart < 100) append('0')
+            if (fractionalPart < 10) append('0')
+            append(fractionalPart)
+        }
+        return this
     }
 
     private fun StringBuilder.appendSessionHeader(part: Int) {
@@ -383,9 +399,11 @@ object Serialization {
     suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: Pose? = null) {
         if (!isInitialized) {
             initializationMutex.withLock {
-                pendingCustomEvents.add(Triple(category, properties, pose))
+                if (!isInitialized) {
+                    pendingCustomEvents.add(Triple(category, properties, pose))
+                    return
+                }
             }
-            return
         }
 
         val finalPose = pose?.toLeftHanded() ?: GazeManager.getHeadPose()
@@ -443,9 +461,11 @@ object Serialization {
     suspend fun recordDynamicManifest(id: String, name: String, meshName: String, isController: Boolean, controllerType: String) {
         if (!isInitialized) {
             initializationMutex.withLock {
-                pendingDynamicManifests.add(DynamicManifestEntry(id, name, meshName, isController, controllerType))
+                if (!isInitialized) {
+                    pendingDynamicManifests.add(DynamicManifestEntry(id, name, meshName, isController, controllerType))
+                    return
+                }
             }
-            return
         }
 
         dynamicMutex.withLock {

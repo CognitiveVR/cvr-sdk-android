@@ -21,7 +21,8 @@ object Cognitive3DManager {
     private var config: Cognitive3DConfig? = null
     
     // Channel for high-frequency sensor data
-    private val sensorChannel = Channel<SensorPoint>(capacity = Channel.UNLIMITED)
+    @Volatile
+    private var sensorChannel = Channel<SensorPoint>(capacity = Channel.UNLIMITED)
     private var sensorProcessorJob: Job? = null
 
     private data class SensorPoint(val category: String, val value: Float, val timestamp: Double)
@@ -85,6 +86,9 @@ object Cognitive3DManager {
 
     private fun startSensorProcessor() {
         sensorProcessorJob?.cancel()
+        if (sensorChannel.isClosedForSend) {
+            sensorChannel = Channel(capacity = Channel.UNLIMITED)
+        }
         sensorProcessorJob = scope.launch {
             for (point in sensorChannel) {
                 Serialization.recordSensor(point.category, point.value, point.timestamp)
@@ -123,10 +127,12 @@ object Cognitive3DManager {
     @JvmStatic
     fun resumeSession(session: Session) {
         Log.d(Util.TAG, "Cognitive3D Session Resumed")
-        // Stop recording loops
+
+        // Start recording loops
         GazeManager.startGazeRecording(scope, session)
         DynamicManager.startDynamicRecording(scope, session)
-        PerformanceMonitor.startMonitoring(scope)
+        PerformanceMonitor.stopMonitoring()
+        startSensorProcessor()
         startFlushTimer()
     }
 
@@ -159,6 +165,7 @@ object Cognitive3DManager {
             
             sensorProcessorJob?.cancel()
             sensorProcessorJob = null
+            sensorChannel.close()
         }
     }
 
@@ -322,7 +329,10 @@ object Cognitive3DManager {
     @JvmStatic
     fun recordSensor(category: String, value: Float) {
         val timestamp = System.currentTimeMillis().toDouble() / 1000.0
-        sensorChannel.trySend(SensorPoint(category, value, timestamp))
+        val result = sensorChannel.trySend(SensorPoint(category, value, timestamp))
+        if (result.isFailure) {
+            Log.w(Util.TAG, "Failed to send sensor data for $category: ${result.exceptionOrNull()}")
+        }
     }
 
     /**

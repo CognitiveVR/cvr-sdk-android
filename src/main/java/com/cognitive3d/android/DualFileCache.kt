@@ -81,11 +81,20 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
                 // Decode using UTF-8 and split by our known delimiter
                 val content = String(buffer, Charsets.UTF_8)
                 val lines = content.split(eol)
+                
                 if (lines.size >= 2) {
                     val url = lines[0]
                     val body = lines[1]
-                    if (url.isNotEmpty() && body.isNotEmpty()) {
+                    
+                    // Validate that the decoded strings match the expected byte lengths.
+                    // This prevents issues with multi-byte character misalignment or 
+                    // unexpected line delimiters.
+                    if (url.toByteArray(Charsets.UTF_8).size == urlLen && 
+                        body.toByteArray(Charsets.UTF_8).size == bodyLen) {
                         return Triple(url, body, url.contains("audio"))
+                    } else {
+                        Log.e(Util.TAG, "Cache misalignment detected: expected ($urlLen, $bodyLen) bytes, but got different lengths after decoding.")
+                        rebuildReadLineLengths()
                     }
                 }
             }
@@ -172,6 +181,10 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         }
     }
 
+    /**
+     * Rebuilds the list of line lengths by reading the entire file.
+     * This ensures accurate seeking and truncation after a merge or if a misalignment is detected.
+     */
     private fun rebuildReadLineLengths() {
         readLineLengths.clear()
         if (!readFile.exists() || readFile.length() == 0L) return
