@@ -122,9 +122,10 @@ object DynamicManager {
                 Serialization.recordDynamic(
                     obj.id,
                     currentTime,
-                    floatArrayOf(pos.x, pos.y, pos.z),
-                    floatArrayOf(rot.x, rot.y, rot.z, rot.w),
-                    floatArrayOf(currentScaleValue, currentScaleValue, currentScaleValue),
+                    pos.x, pos.y, pos.z,
+                    rot.x, rot.y, rot.z, rot.w,
+                    currentScaleValue, currentScaleValue, currentScaleValue,
+                    true,
                     propertiesJson
                 )
                 
@@ -196,7 +197,8 @@ object DynamicManager {
         val isRight = obj.controllerType == "hand_right"
         return try {
             val hand = if (isRight) Hand.right(session) else Hand.left(session)
-            val handPose = hand?.state?.first()?.handJoints?.get(HandJointType.HAND_JOINT_TYPE_WRIST)
+            val handState = hand?.state?.first() ?: return null
+            val handPose = handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST]
                 ?: return null
 
             // Hand poses from ARCore are in Perception Space; transform to Activity Space

@@ -23,7 +23,14 @@ object NetworkManager {
     private val networkScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun init(context: Context, config: Cognitive3DConfig) {
-        applicationKey = config.apiKey
+        // Ensure the API key starts with the required prefix
+        val rawKey = config.apiKey
+        applicationKey = if (rawKey.startsWith("APIKEY:DATA ")) {
+            rawKey
+        } else {
+            "APIKEY:DATA $rawKey"
+        }
+
         cacheCheckInterval = (config.automaticSendTimer * 1000).toLong()
         
         if (cache == null) {

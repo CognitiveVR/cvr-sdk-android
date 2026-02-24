@@ -112,7 +112,11 @@ class Cognitive3DInitializer : ContentProvider() {
                             val session = result.session
                             xrSession = session
                             val newConfig = session.config.copy(
+                                // For androidx.xr.runtime:runtime:1.0.0-alpha09
                                 headTracking = Config.HeadTrackingMode.LAST_KNOWN,
+
+                                // For androidx.xr.runtime:runtime:1.0.0-alpha10
+                                // deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
                                 handTracking = Config.HandTrackingMode.BOTH
                             )
                             

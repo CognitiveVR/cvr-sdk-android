@@ -7,17 +7,18 @@ import java.io.*
 class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024 * 5) {
     private val readFileName = "data_read"
     private val writeFileName = "data_write"
-    private val eol = System.lineSeparator()
+    private val eol = "\n" 
+    private val eolBytes = eol.toByteArray(Charsets.UTF_8).size
 
     private val cacheDir: File
     private val readFile: File
     private val writeFile: File
 
+    // Stores length in BYTES to ensure accurate seeking and truncation
     private val readLineLengths = mutableListOf<Int>()
     private var numberWriteBatches = 0
 
     init {
-        // Use external storage if available, fallback to internal if not
         val externalDir = context.getExternalFilesDir(null)
         cacheDir = File(externalDir ?: context.filesDir, "c3dlocal")
         
@@ -32,9 +33,9 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         if (!writeFile.exists()) writeFile.createNewFile()
 
         // Count existing batches in write file
-        if (writeFile.exists()) {
+        if (writeFile.exists() && writeFile.length() > 0) {
             var lines = 0
-            writeFile.bufferedReader().use { reader ->
+            writeFile.bufferedReader(Charsets.UTF_8).use { reader ->
                 while (reader.readLine() != null) lines++
             }
             numberWriteBatches = lines / 2
@@ -60,22 +61,41 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
     @Synchronized
     fun peekContent(): Triple<String, String, Boolean>? {
         if (!hasContent()) return null
-
         if (readLineLengths.size < 2) return null
 
         try {
             val bodyLen = readLineLengths[readLineLengths.size - 1]
             val urlLen = readLineLengths[readLineLengths.size - 2]
             
-            val totalToSeek = (bodyLen + urlLen + eol.length * 2).toLong()
+            // Calculate total bytes to read including delimiters
+            val totalToRead = bodyLen + urlLen + eolBytes * 2
             
             RandomAccessFile(readFile, "r").use { raf ->
-                raf.seek(readFile.length() - totalToSeek)
-                val url = raf.readLine()
-                val body = raf.readLine()
+                val startPos = readFile.length() - totalToRead
+                if (startPos < 0) return null
                 
-                if (!url.isNullOrBlank() && !body.isNullOrBlank()) {
-                    return Triple(url, body, url.contains("audio"))
+                raf.seek(startPos)
+                val buffer = ByteArray(totalToRead)
+                raf.readFully(buffer)
+                
+                // Decode using UTF-8 and split by our known delimiter
+                val content = String(buffer, Charsets.UTF_8)
+                val lines = content.split(eol)
+                
+                if (lines.size >= 2) {
+                    val url = lines[0]
+                    val body = lines[1]
+                    
+                    // Validate that the decoded strings match the expected byte lengths.
+                    // This prevents issues with multi-byte character misalignment or 
+                    // unexpected line delimiters.
+                    if (url.toByteArray(Charsets.UTF_8).size == urlLen && 
+                        body.toByteArray(Charsets.UTF_8).size == bodyLen) {
+                        return Triple(url, body, url.contains("audio"))
+                    } else {
+                        Log.e(Util.TAG, "Cache misalignment detected: expected ($urlLen, $bodyLen) bytes, but got different lengths after decoding.")
+                        rebuildReadLineLengths()
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -91,11 +111,16 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         try {
             val bodyLen = readLineLengths.removeAt(readLineLengths.size - 1)
             val urlLen = readLineLengths.removeAt(readLineLengths.size - 1)
-            val bytesToRemove = bodyLen + urlLen + eol.length * 2
+            val bytesToRemove = bodyLen.toLong() + urlLen.toLong() + (eolBytes * 2).toLong()
 
             val newLength = readFile.length() - bytesToRemove
-            RandomAccessFile(readFile, "rw").use { raf ->
-                raf.setLength(newLength)
+            if (newLength >= 0) {
+                RandomAccessFile(readFile, "rw").use { raf ->
+                    raf.setLength(newLength)
+                }
+            } else {
+                RandomAccessFile(readFile, "rw").use { it.setLength(0) }
+                readLineLengths.clear()
             }
         } catch (e: Exception) {
             Log.e(Util.TAG, "Error popping cache", e)
@@ -108,7 +133,7 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         if (!canWrite(url, body)) return false
 
         try {
-            FileOutputStream(writeFile, true).bufferedWriter().use { writer ->
+            FileOutputStream(writeFile, true).bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(url)
                 writer.write(eol)
                 writer.write(body)
@@ -124,8 +149,9 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
 
     private fun canWrite(url: String, body: String): Boolean {
         val totalBytes = readFile.length() + writeFile.length()
-        val eolBytes = eol.toByteArray().size
-        val newBytes = url.toByteArray().size + body.toByteArray().size + (eolBytes * 2).toLong()
+        val newBytes = url.toByteArray(Charsets.UTF_8).size.toLong() + 
+                       body.toByteArray(Charsets.UTF_8).size.toLong() + 
+                       (eolBytes * 2).toLong()
         
         if ((totalBytes + newBytes) > cacheLimit) {
             Log.w(Util.TAG, "Data Cache reached size limit!")
@@ -138,15 +164,10 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         try {
             if (writeFile.length() == 0L) return
 
-            FileOutputStream(readFile, true).bufferedWriter().use { writer ->
-                writeFile.bufferedReader().use { reader ->
-                    var line: String?
-                    while (reader.readLine().also { line = it } != null) {
-                        if (!line.isNullOrBlank()) {
-                            writer.write(line)
-                            writer.write(eol)
-                        }
-                    }
+            // Binary copy for better performance and safety
+            FileOutputStream(readFile, true).use { outputStream ->
+                writeFile.inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
                 }
             }
             
@@ -160,15 +181,19 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         }
     }
 
+    /**
+     * Rebuilds the list of line lengths by reading the entire file.
+     * This ensures accurate seeking and truncation after a merge or if a misalignment is detected.
+     */
     private fun rebuildReadLineLengths() {
         readLineLengths.clear()
-        if (!readFile.exists()) return
+        if (!readFile.exists() || readFile.length() == 0L) return
         
         try {
-            readFile.bufferedReader().use { reader ->
+            readFile.bufferedReader(Charsets.UTF_8).use { reader ->
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
-                    readLineLengths.add(line!!.length)
+                    readLineLengths.add(line!!.toByteArray(Charsets.UTF_8).size)
                 }
             }
         } catch (e: Exception) {

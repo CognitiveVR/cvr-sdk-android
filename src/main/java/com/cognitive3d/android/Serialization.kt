@@ -1,14 +1,12 @@
 package com.cognitive3d.android
 
 import android.content.Context
-import android.util.Log
 import androidx.xr.runtime.math.Pose
 import com.cognitive3d.android.Util.toLeftHanded
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.text.append
 
 object Serialization {
     private var gatewayURL: String = "https://data.cognitive3d.com"
@@ -35,11 +33,26 @@ object Serialization {
     private var sensorCount: Int = 0
     private var boundaryCount: Int = 0
     
-    private val mutex = Mutex()
+    // Separate mutexes to reduce contention between different data streams
+    private val gazeMutex = Mutex()
+    private val eventMutex = Mutex()
+    private val dynamicMutex = Mutex()
+    private val sensorMutex = Mutex()
+    private val boundaryMutex = Mutex()
+    private val initializationMutex = Mutex()
     
     private val allSessionProperties = ConcurrentHashMap<String, Any>()
     private val dirtySessionProperties = ConcurrentHashMap<String, Any>()
     private val pendingCustomEvents = mutableListOf<Triple<String?, Map<String, Any?>, Pose?>>()
+    
+    private data class DynamicManifestEntry(
+        val id: String,
+        val name: String,
+        val meshName: String,
+        val isController: Boolean,
+        val controllerType: String
+    )
+    private val pendingDynamicManifests = mutableListOf<DynamicManifestEntry>()
 
     private var GAZE_THRESHOLD = 256
     private var EVENT_THRESHOLD = 256
@@ -48,26 +61,44 @@ object Serialization {
     private var BOUNDARY_THRESHOLD = 64
     private var SNAPSHOT_INTERVAL = 0.1f
 
-    private lateinit var gazeBuilder : StringBuilder
-    private lateinit var eventBuilder : StringBuilder
-    private lateinit var dynamicBuilder : StringBuilder
-    private lateinit var dynamicManifestBuilder : StringBuilder
-    private lateinit var boundaryBuilder : StringBuilder
+    private var gazeBuilder = StringBuilder()
+    private var eventBuilder = StringBuilder()
+    private var dynamicBuilder = StringBuilder()
+    private var dynamicManifestBuilder = StringBuilder()
+    private var boundaryBuilder = StringBuilder()
+    private var sensorBuilder = StringBuilder()
 
     private val sensorDataMap = ConcurrentHashMap<String, SensorData>()
-    private val cachedSnapshots = ConcurrentHashMap<String, MutableList<String>>()
+    
+    private data class SensorReading(val timestamp: Double, val value: Float)
+    private val cachedSnapshots = ConcurrentHashMap<String, MutableList<SensorReading>>()
 
     private val trackingSpaces = mutableListOf<TrackingSpace>()
     private val boundaryShapes = mutableListOf<BoundaryShape>()
 
-    private class SensorData(val name: String, val rate: Float) {
+    private class SensorData(val rate: Float) {
         val rateString: String = String.format(java.util.Locale.US, "%.2f", rate)
         val updateInterval: Float = if (rate == 0f) 0.1f else 1f / rate
     }
 
-    private data class TrackingSpace(val timestamp: Double, val pos: FloatArray, val rot: FloatArray)
-    private data class BoundaryShape(val timestamp: Double, val points: Array<FloatArray>)
+    private data class TrackingSpace(val timestamp: Double, val px: Float, val py: Float, val pz: Float, val rx: Float, val ry: Float, val rz: Float, val rw: Float)
+    private data class BoundaryShape(val timestamp: Double, val points: Array<FloatArray>) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as BoundaryShape
+            if (timestamp != other.timestamp) return false
+            if (!points.contentDeepEquals(other.points)) return false
+            return true
+        }
+        override fun hashCode(): Int {
+            var result = timestamp.hashCode()
+            result = 31 * result + points.contentDeepHashCode()
+            return result
+        }
+    }
 
+    @Volatile
     private var isInitialized = false
 
     fun init(context: Context, config : Cognitive3DConfig) {
@@ -81,7 +112,6 @@ object Serialization {
         sessionTimestamp = System.currentTimeMillis().toDouble() / 1000.0
         userID = Util.getOrCreateUserId(context)
         
-        // Use toLong() to avoid scientific notation (E12) in the string
         sessionID = sessionTimestamp.toLong().toString() + "_" + userID
 
         NetworkManager.init(context, config)
@@ -92,22 +122,38 @@ object Serialization {
         resetSensors()
         resetBoundary()
         
-        isInitialized = true
-        
-        // Process any pending events that were recorded before initialization
         CoroutineScope(Dispatchers.IO).launch {
-            mutex.withLock {
+            initializationMutex.withLock {
+                // Process pending custom events
                 if (pendingCustomEvents.isNotEmpty()) {
                     val eventsToProcess = pendingCustomEvents.toList()
                     pendingCustomEvents.clear()
-                    eventsToProcess.forEach { (category, properties, storedPose) ->
-                        // If storedPose is null, we must fetch the head pose NOW
-                        // because GazeManager is likely ready now that isInitialized is true.
-                        val finalPose = storedPose?.toLeftHanded() ?: GazeManager.getHeadPose()
-
-                        serializeCustomEventsInternal(category, properties, finalPose)
+                    
+                    val payloads = eventMutex.withLock {
+                        eventsToProcess.mapNotNull { (category, properties, storedPose) ->
+                            val finalPose = storedPose?.toLeftHanded() ?: GazeManager.getHeadPose()
+                            serializeCustomEventsInternal(category, properties, finalPose)
+                        }
+                    }
+                    
+                    payloads.forEach { payload ->
+                        NetworkManager.send(eventURL, payload)
                     }
                 }
+
+                // Process pending dynamic manifests
+                if (pendingDynamicManifests.isNotEmpty()) {
+                    val manifestsToProcess = pendingDynamicManifests.toList()
+                    pendingDynamicManifests.clear()
+                    dynamicMutex.withLock {
+                        manifestsToProcess.forEach { m ->
+                            recordDynamicManifestInternal(m.id, m.name, m.meshName, m.isController, m.controllerType)
+                        }
+                    }
+                }
+                
+                // Set isInitialized only after all pending data has been processed.
+                isInitialized = true
             }
         }
     }
@@ -119,16 +165,15 @@ object Serialization {
         SENSOR_THRESHOLD = config.sensorSnapshotCount
         BOUNDARY_THRESHOLD = config.boundarySnapshotCount
 
-        // Pre-calculate sizes based on thresholds to avoid array copying during append
         gazeBuilder = StringBuilder(70 * GAZE_THRESHOLD + 1200)
         eventBuilder = StringBuilder(150 * EVENT_THRESHOLD + 1200)
         dynamicBuilder = StringBuilder(128 * DYNAMIC_THRESHOLD + 1200)
         dynamicManifestBuilder = StringBuilder(1024)
         boundaryBuilder = StringBuilder(200 * BOUNDARY_THRESHOLD + 1200)
+        sensorBuilder = StringBuilder(150 * SENSOR_THRESHOLD + 1200)
     }
 
     fun setSceneId(scene: Cognitive3DConfig.SceneSetting) {
-        // Construct URLs based on Scene ID
         val baseUrl = (if (gatewayURL.endsWith("/")) gatewayURL else "$gatewayURL/") + "v0/"
         eventURL = "${baseUrl}events/${scene.sceneId}?version=${scene.sceneVersion}"
         gazeURL = "${baseUrl}gaze/${scene.sceneId}?version=${scene.sceneVersion}"
@@ -153,10 +198,9 @@ object Serialization {
     }
 
     private fun resetSensors() {
-        sensorDataMap.clear()
         cachedSnapshots.clear()
+        sensorDataMap.clear()
         sensorCount = 0
-        sensorJsonPart = 1
     }
 
     private fun resetBoundary() {
@@ -164,7 +208,6 @@ object Serialization {
         trackingSpaces.clear()
         boundaryShapes.clear()
         boundaryCount = 0
-        boundaryJsonPart = 1
     }
 
     fun setSessionProperty(key: String, value: Any) {
@@ -175,12 +218,15 @@ object Serialization {
         }
     }
 
-    suspend fun recordGaze(hmdPosition: FloatArray, hmdRotation: FloatArray, timestamp: Double) {
+    /**
+     * Records a single gaze snapshot, typically representing the user's head pose.
+     */
+    suspend fun recordGaze(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, timestamp: Double) {
         if (!isInitialized) return
         
-        val payload = mutex.withLock {
+        val payload = gazeMutex.withLock {
             if (gazeCount > 0) gazeBuilder.append(',')
-            gazeBuilder.appendGazePoint(timestamp, hmdPosition, hmdRotation)
+            gazeBuilder.appendGazePoint(timestamp, px, py, pz, rx, ry, rz, rw)
             gazeCount++
 
             if (gazeCount >= GAZE_THRESHOLD) {
@@ -193,16 +239,6 @@ object Serialization {
         payload?.let { NetworkManager.send(gazeURL, it) }
     }
 
-    private suspend fun sendGazeBatchLocked() {
-        if (gazeCount == 0 && dirtySessionProperties.isEmpty()) return
-
-        val payload = finalizeGazePayload()
-        gazeCount = 0
-        resetGazeBuilder()
-
-        NetworkManager.send(gazeURL, payload)
-    }
-
     private fun finalizeGazePayload(): String {
         gazeBuilder.append("],")
         gazeBuilder.appendSessionHeader(gazeJsonPart++)
@@ -211,11 +247,46 @@ object Serialization {
         return gazeBuilder.toString()
     }
 
-    private fun StringBuilder.appendGazePoint(time: Double, pos: FloatArray, rot: FloatArray) {
+    private fun StringBuilder.appendGazePoint(time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float) {
         append("{\"time\":").append(time)
-        append(",\"p\":[").append(pos[0]).append(',').append(pos[1]).append(',').append(pos[2]).append(']')
-        append(",\"r\":[").append(rot[0]).append(',').append(rot[1]).append(',').append(rot[2]).append(',').append(rot[3]).append(']')
+        append(",\"p\":[")
+        appendFloat(px).append(',')
+        appendFloat(py).append(',')
+        appendFloat(pz).append(']')
+        append(",\"r\":[")
+        appendFloat(rx).append(',')
+        appendFloat(ry).append(',')
+        appendFloat(rz).append(',')
+        appendFloat(rw).append(']')
         append('}')
+    }
+
+    private fun StringBuilder.appendFloat(value: Float): StringBuilder {
+        if (value.isNaN()) return append("0")
+        if (value.isInfinite()) return append(if (value > 0) "99999" else "-99999")
+        
+        var v = value
+        if (v < 0) {
+            append('-')
+            v = -v
+        }
+        
+        val multiplier = 10000
+        val total = (v * multiplier + 0.5f).toLong()
+        val integerPart = total / multiplier
+        val fractionalPart = total % multiplier
+        
+        append(integerPart).append('.')
+        
+        if (fractionalPart == 0L) {
+            append("0000")
+        } else {
+            if (fractionalPart < 1000) append('0')
+            if (fractionalPart < 100) append('0')
+            if (fractionalPart < 10) append('0')
+            append(fractionalPart)
+        }
+        return this
     }
 
     private fun StringBuilder.appendSessionHeader(part: Int) {
@@ -258,38 +329,52 @@ object Serialization {
         }
     }
 
-    //region Custom Events Serialization
-    /**
-     * Flushes all current data buffers to the gateway.
-     * Sends Gaze, Events, and Dynamics in parallel to minimize time.
-     */
     suspend fun flush() = coroutineScope {
         if (!isInitialized) return@coroutineScope
         
-        val gazeP: String?
-        val eventP: String?
-        val dynamicP: String?
-        val sensorP: String?
-        val boundaryP: String?
-
-        mutex.withLock {
-            gazeP = if (gazeCount > 0 || dirtySessionProperties.isNotEmpty()) finalizeGazePayload() else null
-            if (gazeP != null) { gazeCount = 0; resetGazeBuilder() }
-
-            eventP = if (eventCount > 0) finalizeEventPayload() else null
-            if (eventP != null) { eventCount = 0; resetEventBuilder() }
-
-            dynamicP = if (dynamicCount > 0 || dynamicManifestBuilder.isNotEmpty()) finalizeDynamicPayload() else null
-            if (dynamicP != null) { dynamicCount = 0; resetDynamicBuilder() }
-
-            sensorP = if (sensorCount > 0) finalizeSensorPayload() else null
-            if (sensorP != null) { sensorCount = 0 }
-
-            boundaryP = if (trackingSpaces.isNotEmpty() || boundaryShapes.isNotEmpty()) finalizeBoundaryPayload() else null
-            if (boundaryP != null) { resetBoundary() }
+        val gazeP = gazeMutex.withLock {
+            if (gazeCount > 0 || dirtySessionProperties.isNotEmpty()) {
+                val p = finalizeGazePayload()
+                gazeCount = 0
+                resetGazeBuilder()
+                p
+            } else null
         }
 
-        // Send all payloads in parallel
+        val eventP = eventMutex.withLock {
+            if (eventCount > 0) {
+                val p = finalizeEventPayload()
+                eventCount = 0
+                resetEventBuilder()
+                p
+            } else null
+        }
+
+        val dynamicP = dynamicMutex.withLock {
+            if (dynamicCount > 0 || dynamicManifestBuilder.isNotEmpty()) {
+                val p = finalizeDynamicPayload()
+                dynamicCount = 0
+                resetDynamicBuilder()
+                p
+            } else null
+        }
+
+        val sensorP = sensorMutex.withLock {
+            if (sensorCount > 0) {
+                val p = finalizeSensorPayload()
+                sensorCount = 0
+                p
+            } else null
+        }
+
+        val boundaryP = boundaryMutex.withLock {
+            if (trackingSpaces.isNotEmpty() || boundaryShapes.isNotEmpty()) {
+                val p = finalizeBoundaryPayload()
+                resetBoundary()
+                p
+            } else null
+        }
+
         val jobs = listOfNotNull(
             gazeP?.let { launch { NetworkManager.send(gazeURL, it) } },
             eventP?.let { launch { NetworkManager.send(eventURL, it) } },
@@ -298,14 +383,6 @@ object Serialization {
             boundaryP?.let { launch { NetworkManager.send(boundaryURL, it) } }
         )
         jobs.joinAll()
-    }
-
-    private suspend fun sendEventBatchLocked() {
-        if (eventCount == 0) return
-        val payload = finalizeEventPayload()
-        eventCount = 0
-        resetEventBuilder()
-        NetworkManager.send(eventURL, payload)
     }
 
     private fun finalizeEventPayload(): String {
@@ -320,44 +397,49 @@ object Serialization {
     }
 
     suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: Pose? = null) {
-        mutex.withLock {
-            if (!isInitialized) {
-                pendingCustomEvents.add(Triple(category, properties, pose))
-                return
+        if (!isInitialized) {
+            initializationMutex.withLock {
+                if (!isInitialized) {
+                    pendingCustomEvents.add(Triple(category, properties, pose))
+                    return
+                }
             }
+        }
 
-            val finalPose = pose?.toLeftHanded() ?: GazeManager.getHeadPose()
+        val finalPose = pose?.toLeftHanded() ?: GazeManager.getHeadPose()
+        val payload = eventMutex.withLock {
             serializeCustomEventsInternal(category, properties, finalPose)
         }
+        payload?.let { NetworkManager.send(eventURL, it) }
     }
 
-    private suspend fun serializeCustomEventsInternal(category: String?, properties: Map<String, Any?>, pose: Pose?) {
-        val payload = run {
-            if (eventCount > 0) eventBuilder.append(',')
-            
-            eventBuilder.apply {
-                append('{')
-                appendKeyValue("name", category)
-                appendKeyValue("time", System.currentTimeMillis().toDouble() / 1000.0)
-                append("\"point\":[").append(pose?.translation?.x).append(',').append(pose?.translation?.y).append(',').append(pose?.translation?.z).append(']')
+    private fun serializeCustomEventsInternal(category: String?, properties: Map<String, Any?>, pose: Pose?): String? {
+        if (eventCount > 0) eventBuilder.append(',')
+        
+        eventBuilder.apply {
+            append('{')
+            appendKeyValue("name", category)
+            appendKeyValue("time", System.currentTimeMillis().toDouble() / 1000.0)
+            append("\"point\":[")
+            appendFloat(pose?.translation?.x ?: 0f).append(',')
+            appendFloat(pose?.translation?.y ?: 0f).append(',')
+            appendFloat(pose?.translation?.z ?: 0f).append(']')
 
-                if (properties.isNotEmpty()) {
-                    append(",\"properties\":{")
-                    appendProperties(properties)
-                    append('}')
-                }
+            if (properties.isNotEmpty()) {
+                append(",\"properties\":{")
+                appendProperties(properties)
                 append('}')
             }
-            eventCount++
-
-            if (eventCount >= EVENT_THRESHOLD) {
-                val p = finalizeEventPayload()
-                eventCount = 0
-                resetEventBuilder()
-                p
-            } else null
+            append('}')
         }
-        payload?.let { NetworkManager.send(eventURL, it) }
+        eventCount++
+
+        return if (eventCount >= EVENT_THRESHOLD) {
+            val p = finalizeEventPayload()
+            eventCount = 0
+            resetEventBuilder()
+            p
+        } else null
     }
 
     private fun StringBuilder.appendKeyValue(key: String, value: Any?) {
@@ -375,39 +457,65 @@ object Serialization {
             appendJsonValue(value)
         }
     }
-    //endregion
 
-    //region Dynamic Objects Serialization
     suspend fun recordDynamicManifest(id: String, name: String, meshName: String, isController: Boolean, controllerType: String) {
-        mutex.withLock {
-            if (dynamicManifestBuilder.isNotEmpty()) dynamicManifestBuilder.append(',')
-            dynamicManifestBuilder.append('"').append(id).append("\":{")
-            dynamicManifestBuilder.append("\"name\":\"").append(name).append("\",")
-            dynamicManifestBuilder.append("\"mesh\":\"").append(meshName).append("\",")
-            dynamicManifestBuilder.append("\"fileType\":\"gltf\"")
-            if (isController) {
-                dynamicManifestBuilder.append(",\"controllerType\":\"").append(controllerType).append("\"")
+        if (!isInitialized) {
+            initializationMutex.withLock {
+                if (!isInitialized) {
+                    pendingDynamicManifests.add(DynamicManifestEntry(id, name, meshName, isController, controllerType))
+                    return
+                }
             }
-            dynamicManifestBuilder.append('}')
+        }
+
+        dynamicMutex.withLock {
+            recordDynamicManifestInternal(id, name, meshName, isController, controllerType)
         }
     }
 
-    suspend fun recordDynamic(id: String, time: Double, pos: FloatArray, rot: FloatArray, scale: FloatArray?, properties: String?) {
+    private fun recordDynamicManifestInternal(id: String, name: String, meshName: String, isController: Boolean, controllerType: String) {
+        if (dynamicManifestBuilder.isNotEmpty()) dynamicManifestBuilder.append(',')
+        dynamicManifestBuilder.append('"').append(id).append("\":{")
+        dynamicManifestBuilder.append("\"name\":\"").append(name).append("\",")
+        dynamicManifestBuilder.append("\"mesh\":\"").append(meshName).append("\",")
+        dynamicManifestBuilder.append("\"fileType\":\"gltf\"")
+        if (isController) {
+            dynamicManifestBuilder.append(",\"controllerType\":\"").append(controllerType).append("\"")
+        }
+        dynamicManifestBuilder.append('}')
+    }
+
+    /**
+     * Records a snapshot of a dynamic object's state, including its position, rotation, and scale.
+     */
+    suspend fun recordDynamic(id: String, time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, sx: Float, sy: Float, sz: Float, hasScale: Boolean, properties: String?) {
         if (!isInitialized) return
         
-        val payload = mutex.withLock {
+        val payload = dynamicMutex.withLock {
             if (dynamicCount > 0) dynamicBuilder.append(',')
-            dynamicBuilder.append("{\"id\":\"").append(id).append("\",")
-            dynamicBuilder.append("\"time\":").append(time).append(",")
-            dynamicBuilder.append("\"p\":[").append(pos[0]).append(',').append(pos[1]).append(',').append(pos[2]).append("],")
-            dynamicBuilder.append("\"r\":[").append(rot[0]).append(',').append(rot[1]).append(',').append(rot[2]).append(',').append(rot[3]).append("]")
-            if (scale != null) {
-                dynamicBuilder.append(",\"s\":[").append(scale[0]).append(',').append(scale[1]).append(',').append(scale[2]).append("]")
+            dynamicBuilder.apply {
+                append("{\"id\":\"").append(id).append("\",")
+                append("\"time\":").append(time).append(",")
+                append("\"p\":[")
+                appendFloat(px).append(',')
+                appendFloat(py).append(',')
+                appendFloat(pz).append("],")
+                append("\"r\":[")
+                appendFloat(rx).append(',')
+                appendFloat(ry).append(',')
+                appendFloat(rz).append(',')
+                appendFloat(rw).append("]")
+                if (hasScale) {
+                    append(",\"s\":[")
+                    appendFloat(sx).append(',')
+                    appendFloat(sy).append(',')
+                    appendFloat(sz).append("]")
+                }
+                if (!properties.isNullOrEmpty()) {
+                    append(",\"properties\":[").append(properties).append("]")
+                }
+                append('}')
             }
-            if (!properties.isNullOrEmpty()) {
-                dynamicBuilder.append(",\"properties\":[").append(properties).append("]")
-            }
-            dynamicBuilder.append('}')
             dynamicCount++
 
             if (dynamicCount >= DYNAMIC_THRESHOLD) {
@@ -418,14 +526,6 @@ object Serialization {
             } else null
         }
         payload?.let { NetworkManager.send(dynamicURL, it) }
-    }
-
-    private suspend fun sendDynamicBatchLocked() {
-        if (dynamicCount == 0 && dynamicManifestBuilder.isEmpty()) return
-        val payload = finalizeDynamicPayload()
-        dynamicCount = 0
-        resetDynamicBuilder()
-        NetworkManager.send(dynamicURL, payload)
     }
 
     private fun finalizeDynamicPayload(): String {
@@ -442,24 +542,21 @@ object Serialization {
         dynamicBuilder.append('}')
         return dynamicBuilder.toString()
     }
-    //endregion
 
-    //region Sensors Serialization
     fun initializeSensor(sensorName: String, hzRate: Float) {
         if (!isInitialized) return
-        if (!sensorDataMap.containsKey(sensorName)) {
-            sensorDataMap[sensorName] = SensorData(sensorName, hzRate)
-        }
+        // Use putIfAbsent for an atomic check-and-put operation
+        sensorDataMap.putIfAbsent(sensorName, SensorData(hzRate))
     }
 
     suspend fun recordSensor(category: String, value: Float, timestamp: Double) {
         if (!isInitialized) return
         
-        initializeSensor(category, 10f)
-        
-        val payload = mutex.withLock {
+        val payload = sensorMutex.withLock {
+            initializeSensor(category, 10f)
+            
             val list = cachedSnapshots.getOrPut(category) { mutableListOf() }
-            list.add("[$timestamp,$value]")
+            list.add(SensorReading(timestamp, value))
             sensorCount++
             
             if (sensorCount >= SENSOR_THRESHOLD) {
@@ -472,50 +569,57 @@ object Serialization {
     }
 
     private fun finalizeSensorPayload(): String {
-        val sb = StringBuilder(1024)
-        sb.append("{")
-        sb.appendKeyValue("name", userID)
-        sb.appendKeyValue("sessionid", sessionID)
-        sb.appendKeyValue("timestamp", sessionTimestamp.toLong())
-        sb.appendKeyValue("part", sensorJsonPart++)
-        sb.appendKeyValue("formatversion", "2.0")
-        sb.append("\"data\":[")
+        sensorBuilder.setLength(0)
+        sensorBuilder.append("{")
+        sensorBuilder.appendKeyValue("name", userID)
+        sensorBuilder.appendKeyValue("sessionid", sessionID)
+        sensorBuilder.appendKeyValue("timestamp", sessionTimestamp.toLong())
+        sensorBuilder.appendKeyValue("part", sensorJsonPart++)
+        sensorBuilder.appendKeyValue("formatversion", "2.0")
+        sensorBuilder.append("\"data\":[")
         
         var firstSensor = true
-        for ((name, snapshots) in cachedSnapshots) {
-            if (snapshots.isEmpty()) continue
-            if (!firstSensor) sb.append(',')
+        for ((name, readings) in cachedSnapshots) {
+            if (readings.isEmpty()) continue
+            if (!firstSensor) sensorBuilder.append(',')
             firstSensor = false
             
-            sb.append("{")
-            sb.appendKeyValue("name", name)
+            sensorBuilder.append("{")
+            sensorBuilder.appendKeyValue("name", name)
             
             sensorDataMap[name]?.let { data ->
-                sb.appendKeyValue("sensorHzLimitType", data.rateString)
+                sensorBuilder.appendKeyValue("sensorHzLimitType", data.rateString)
                 if (data.updateInterval >= 0.1f) {
-                    sb.appendKeyValue("sensorHzLimited", "true")
+                    sensorBuilder.appendKeyValue("sensorHzLimited", "true")
                 }
             }
             
-            sb.append("\"data\":[")
-            for (i in snapshots.indices) {
-                if (i > 0) sb.append(',')
-                sb.append(snapshots[i])
+            sensorBuilder.append("\"data\":[")
+            for (i in readings.indices) {
+                if (i > 0) sensorBuilder.append(',')
+                val r = readings[i]
+                sensorBuilder.append('[')
+                sensorBuilder.append(r.timestamp)
+                sensorBuilder.append(',')
+                sensorBuilder.appendFloat(r.value)
+                sensorBuilder.append(']')
             }
-            sb.append("]}")
-            snapshots.clear()
+            sensorBuilder.append("]}")
+            readings.clear()
         }
         
-        sb.append("]}")
-        return sb.toString()
+        sensorBuilder.append("]}")
+        return sensorBuilder.toString()
     }
-    //endregion
 
-    //region Boundary Serialization
-    suspend fun recordTrackingSpace(pos: FloatArray, rot: FloatArray, timestamp: Double) {
+    /**
+     * Records the position and orientation of the tracking space.
+     * This is typically the headset's pose in the real world.
+     */
+    suspend fun recordTrackingSpace(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, timestamp: Double) {
         if (!isInitialized) return
-        val payload = mutex.withLock {
-            trackingSpaces.add(TrackingSpace(timestamp, pos, rot))
+        val payload = boundaryMutex.withLock {
+            trackingSpaces.add(TrackingSpace(timestamp, px, py, pz, rx, ry, rz, rw))
             boundaryCount++
             if (boundaryCount >= BOUNDARY_THRESHOLD) {
                 val p = finalizeBoundaryPayload()
@@ -528,7 +632,7 @@ object Serialization {
 
     suspend fun recordBoundaryShape(points: Array<FloatArray>, timestamp: Double) {
         if (!isInitialized) return
-        val payload = mutex.withLock {
+        val payload = boundaryMutex.withLock {
             boundaryShapes.add(BoundaryShape(timestamp, points))
             boundaryCount++
             if (boundaryCount >= BOUNDARY_THRESHOLD) {
@@ -541,45 +645,55 @@ object Serialization {
     }
 
     private fun finalizeBoundaryPayload(): String {
-        val sb = StringBuilder(1024)
-        sb.append("{\"data\":[")
+        boundaryBuilder.setLength(0)
+        boundaryBuilder.append("{\"data\":[")
         
-        // Add Tracking Spaces to "data" array
         for (i in trackingSpaces.indices) {
             val ts = trackingSpaces[i]
-            if (i > 0) sb.append(',')
-            sb.append("{\"time\":").append(ts.timestamp)
-            sb.append(",\"p\":[").append(ts.pos[0]).append(',').append(ts.pos[1]).append(',').append(ts.pos[2]).append(']')
-            sb.append(",\"r\":[").append(ts.rot[0]).append(',').append(ts.rot[1]).append(',').append(ts.rot[2]).append(',').append(ts.rot[3]).append(']')
-            sb.append('}')
+            if (i > 0) boundaryBuilder.append(',')
+            boundaryBuilder.apply {
+                append("{\"time\":").append(ts.timestamp)
+                append(",\"p\":[")
+                appendFloat(ts.px).append(',')
+                appendFloat(ts.py).append(',')
+                appendFloat(ts.pz).append(']')
+                append(",\"r\":[")
+                appendFloat(ts.rx).append(',')
+                appendFloat(ts.ry).append(',')
+                appendFloat(ts.rz).append(',')
+                appendFloat(ts.rw).append(']')
+                append('}')
+            }
         }
-        sb.append("],")
+        boundaryBuilder.append("],")
 
-        // Add Boundary Shapes
-        sb.append("\"shapes\":[")
+        boundaryBuilder.append("\"shapes\":[")
         for (i in boundaryShapes.indices) {
             val bs = boundaryShapes[i]
-            if (i > 0) sb.append(',')
-            sb.append("{\"time\":").append(bs.timestamp)
-            sb.append(",\"points\":[")
-            for (j in bs.points.indices) {
-                val p = bs.points[j]
-                if (j > 0) sb.append(',')
-                sb.append("[").append(p[0]).append(',').append(p[1]).append(',').append(p[2]).append("]")
+            if (i > 0) boundaryBuilder.append(',')
+            boundaryBuilder.apply {
+                append("{\"time\":").append(bs.timestamp)
+                append(",\"points\":[")
+                for (j in bs.points.indices) {
+                    val p = bs.points[j]
+                    if (j > 0) append(',')
+                    append("[")
+                    appendFloat(p[0]).append(',')
+                    appendFloat(p[1]).append(',')
+                    appendFloat(p[2]).append("]")
+                }
+                append("]}")
             }
-            sb.append("]}")
         }
-        sb.append("],")
+        boundaryBuilder.append("],")
 
-        // Header
-        sb.appendKeyValue("userid", userID)
-        sb.appendKeyValue("time", sessionTimestamp.toLong())
-        sb.appendKeyValue("sessionid", sessionID)
-        sb.appendKeyValue("part", boundaryJsonPart++)
-        sb.trimTrailingComma()
-        sb.append('}')
+        boundaryBuilder.appendKeyValue("userid", userID)
+        boundaryBuilder.appendKeyValue("time", sessionTimestamp.toLong())
+        boundaryBuilder.appendKeyValue("sessionid", sessionID)
+        boundaryBuilder.appendKeyValue("part", boundaryJsonPart++)
+        boundaryBuilder.trimTrailingComma()
+        boundaryBuilder.append('}')
         
-        return sb.toString()
+        return boundaryBuilder.toString()
     }
-    //endregion
 }
