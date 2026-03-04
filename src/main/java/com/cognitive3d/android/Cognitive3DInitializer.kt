@@ -12,20 +12,10 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.xr.runtime.Config
-import androidx.xr.runtime.Session
-import androidx.xr.runtime.SessionConfigureSuccess
-import androidx.xr.runtime.SessionCreateSuccess
 
 class Cognitive3DInitializer : ContentProvider() {
 
     companion object {
-        private const val HEAD_TRACKING_PERMISSION = "android.permission.HEAD_TRACKING"
-        private const val HAND_TRACKING_PERMISSION = "android.permission.HAND_TRACKING"
-        private val REQUIRED_PERMISSIONS = arrayOf(
-            HEAD_TRACKING_PERMISSION,
-            HAND_TRACKING_PERMISSION
-        )
         private const val PERMISSION_REQUEST_CODE = 1001
     }
 
@@ -37,7 +27,7 @@ class Cognitive3DInitializer : ContentProvider() {
                 private var startedActivityCount = 0
                 private var isChangingConfiguration = false
                 private var sessionInitialized = false
-                private var xrSession: Session? = null
+                private var platformProvider: PlatformProvider? = null
 
                 override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
 
@@ -45,7 +35,7 @@ class Cognitive3DInitializer : ContentProvider() {
                     startedActivityCount++
                     if (startedActivityCount == 1 && !isChangingConfiguration) {
                         if (hasRequiredPermissions(activity)) {
-                            initializeXRSession(activity)
+                            initializePlatform(activity)
                         } else {
                             requestRequiredPermissions(activity)
                         }
@@ -57,18 +47,14 @@ class Cognitive3DInitializer : ContentProvider() {
                 override fun onActivityResumed(activity: Activity) {
                     if (!sessionInitialized) {
                         if (hasRequiredPermissions(activity)) {
-                            initializeXRSession(activity)
+                            initializePlatform(activity)
                         }
                     } else {
-                        // Resume recording and trackers when returning to the app
-                        xrSession?.let {
-                            Cognitive3DManager.resumeSession(it)
-                        }
+                        Cognitive3DManager.resumeSession()
                     }
                 }
 
                 override fun onActivityPaused(activity: Activity) {
-                    // Flush all pending data immediately on pause to prevent data loss
                     if (sessionInitialized) {
                         Cognitive3DManager.pauseSession()
                     }
@@ -79,8 +65,9 @@ class Cognitive3DInitializer : ContentProvider() {
                     isChangingConfiguration = activity.isChangingConfigurations
                     if (startedActivityCount == 0 && !isChangingConfiguration) {
                         Cognitive3DManager.endSession()
+                        platformProvider?.destroy()
                         sessionInitialized = false
-                        xrSession = null
+                        platformProvider = null
                     }
                 }
 
@@ -88,7 +75,9 @@ class Cognitive3DInitializer : ContentProvider() {
                 override fun onActivityDestroyed(activity: Activity) {}
 
                 private fun hasRequiredPermissions(context: Context): Boolean {
-                    val missing = REQUIRED_PERMISSIONS.filter {
+                    val provider = platformProvider ?: PlatformFactory.create(context as Activity)
+                    val permissions = provider.getRequiredPermissions()
+                    val missing = permissions.filter {
                         ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
                     }
                     if (missing.isNotEmpty()) {
@@ -98,43 +87,26 @@ class Cognitive3DInitializer : ContentProvider() {
                 }
 
                 private fun requestRequiredPermissions(activity: Activity) {
+                    val provider = platformProvider ?: PlatformFactory.create(activity)
                     ActivityCompat.requestPermissions(
                         activity,
-                        REQUIRED_PERMISSIONS,
+                        provider.getRequiredPermissions(),
                         PERMISSION_REQUEST_CODE
                     )
                 }
 
-                private fun initializeXRSession(activity: Activity) {
+                private fun initializePlatform(activity: Activity) {
                     try {
-                        val result = Session.create(activity)
-                        if (result is SessionCreateSuccess) {
-                            val session = result.session
-                            xrSession = session
-                            val newConfig = session.config.copy(
-                                // For androidx.xr.runtime:runtime:1.0.0-alpha09
-                                headTracking = Config.HeadTrackingMode.LAST_KNOWN,
-
-                                // For androidx.xr.runtime:runtime:1.0.0-alpha10
-                                // deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
-                                handTracking = Config.HandTrackingMode.BOTH
-                            )
-                            
-                            val configResult = session.configure(newConfig)
-
-                            if (configResult is SessionConfigureSuccess) {
-                                Cognitive3DManager.initSession(session)
-                                sessionInitialized = true
-                            } else {
-                                Log.w(Util.TAG, "Failed to configure Cognitive3D session: $configResult")
-                            }
+                        val provider = PlatformFactory.create(activity)
+                        if (provider.initialize(activity)) {
+                            platformProvider = provider
+                            Cognitive3DManager.initSession(activity, provider)
+                            sessionInitialized = true
                         } else {
-                            Log.e(Util.TAG, "Failed to create XR Session: $result")
+                            Log.w(Util.TAG, "Failed to initialize platform provider")
                         }
                     } catch (e: Exception) {
-                        Log.e(Util.TAG, "Error during XR Session initialization", e)
-                    } catch (e: NoClassDefFoundError) {
-                        Log.e(Util.TAG, "XR Runtime classes missing from classpath", e)
+                        Log.e(Util.TAG, "Error during platform initialization", e)
                     }
                 }
             })

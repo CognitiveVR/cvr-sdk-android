@@ -2,11 +2,6 @@ package com.cognitive3d.android
 
 import android.content.Context
 import android.util.Log
-import androidx.xr.runtime.Session
-import androidx.xr.runtime.math.Pose
-import androidx.xr.runtime.math.Quaternion
-import androidx.xr.runtime.math.Vector3
-import androidx.xr.scenecore.scene
 import java.util.UUID
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLContext
@@ -52,34 +47,6 @@ object Util {
         if (enableLogging) {
             Log.w(TAG, message)
         }
-    }
-
-    /**
-     * Transforms a pose from perception space to activity space.
-     * Perception space is the raw tracking coordinate system, while activity space
-     * is relative to the user's environment and activity origin.
-     *
-     * @param session The current XR session
-     * @return The pose transformed into activity space
-     */
-    fun Pose.toActivitySpace(session: Session): Pose {
-        return session.scene.perceptionSpace.transformPoseTo(
-            this,
-            session.scene.activitySpace
-        )
-    }
-
-    /**
-     * Converts a pose from a right-handed coordinate system to a left-handed one.
-     * This negates the Z position and adjusts the quaternion rotation accordingly.
-     *
-     * @return The pose converted to left-handed coordinates
-     */
-    fun Pose.toLeftHanded(): Pose {
-        return Pose(
-            Vector3(translation.x, translation.y, -translation.z),
-            Quaternion(-rotation.x, -rotation.y, rotation.z, rotation.w)
-        )
     }
 
     /**

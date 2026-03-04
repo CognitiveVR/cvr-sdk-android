@@ -11,18 +11,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
-import androidx.xr.runtime.Session
-import androidx.xr.scenecore.Entity
 
 object Cognitive3DManager {
     private const val SDK_VERSION: String = "1.0.2"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
-    
-    // Channel for high-frequency sensor data
+    private var platformProvider: PlatformProvider? = null
+
+    // Channel for high-frequency sensor data - Nullable to manage lifecycle safely
     @Volatile
-    private var sensorChannel = Channel<SensorPoint>(capacity = Channel.UNLIMITED)
+    private var sensorChannel: Channel<SensorPoint>? = Channel(capacity = Channel.UNLIMITED)
     private var sensorProcessorJob: Job? = null
 
     private data class SensorPoint(val category: String, val value: Float, val timestamp: Double)
@@ -31,10 +30,10 @@ object Cognitive3DManager {
      * Initializes global session metadata.
      */
     @JvmStatic
-    fun initSession(session: Session)
+    fun initSession(context: Context, provider: PlatformProvider)
     {
-        val context = session.activity.applicationContext
-        val loadedConfig = Cognitive3DConfig.fromAssets(context)
+        val appContext = context.applicationContext
+        val loadedConfig = Cognitive3DConfig.fromAssets(appContext)
         if (loadedConfig == null) {
             Log.e(Util.TAG, "Cognitive3D initialization failed: cognitive3d.json not found in assets or invalid.")
             return
@@ -45,26 +44,23 @@ object Cognitive3DManager {
             return
         }
         config = loadedConfig
-        Serialization.init(context, loadedConfig)
-        startSession(session)
+        platformProvider = provider
+        Serialization.init(appContext, loadedConfig)
+        startSession(appContext, provider)
     }
 
     /**
      * Starts the Cognitive3D session and begins recording.
-     *
-     * @param session The active XR Session.
      */
     @JvmStatic
-    fun startSession(session: Session)
+    fun startSession(context: Context, provider: PlatformProvider)
     {
         Log.d(Util.TAG, "Cognitive3D Session Started")
-        val context = session.activity.applicationContext
 
         startSensorProcessor()
 
         scope.launch {
-            // Set Initial Session Properties (Device Metadata)
-            setInternalSessionProperties(context)
+            setInternalSessionProperties(context, provider)
 
             // Serialize Session Start Event
             Serialization.serializeCustomEvents("c3d.sessionStart", emptyMap())
@@ -72,10 +68,11 @@ object Cognitive3DManager {
             // Force an initial flush so the Start event and Metadata go out immediately
             Serialization.flush()
 
-            // Start Recording loops
             try {
-                GazeManager.startGazeRecording(scope, session)
-                DynamicManager.startDynamicRecording(scope, session)
+                val headProvider = provider.getHeadTrackingProvider()
+                val controllerProvider = provider.getControllerTrackingProvider()
+                GazeManager.startGazeRecording(scope, headProvider)
+                DynamicManager.startDynamicRecording(scope, controllerProvider)
                 PerformanceMonitor.startMonitoring(scope)
                 startFlushTimer()
             } catch (e: Exception) {
@@ -86,11 +83,17 @@ object Cognitive3DManager {
 
     private fun startSensorProcessor() {
         sensorProcessorJob?.cancel()
-        if (sensorChannel.isClosedForSend) {
-            sensorChannel = Channel(capacity = Channel.UNLIMITED)
+        
+        // Ensure we have an active channel. If null (after endSession), create a new one.
+        var channel = sensorChannel
+        if (channel == null) {
+            channel = Channel(capacity = Channel.UNLIMITED)
+            sensorChannel = channel
         }
+        
         sensorProcessorJob = scope.launch {
-            for (point in sensorChannel) {
+            // Iterate over the captured channel reference
+            for (point in channel) {
                 Serialization.recordSensor(point.category, point.value, point.timestamp)
             }
         }
@@ -121,17 +124,18 @@ object Cognitive3DManager {
     /**
      * Resumes Cognitive3D recording.
      * Call this in your Activity's onResume().
-     *
-     * @param session The active XR Session.
      */
     @JvmStatic
-    fun resumeSession(session: Session) {
+    fun resumeSession() {
         Log.d(Util.TAG, "Cognitive3D Session Resumed")
 
-        // Start recording loops
-        GazeManager.startGazeRecording(scope, session)
-        DynamicManager.startDynamicRecording(scope, session)
-        PerformanceMonitor.stopMonitoring()
+        val provider = platformProvider ?: return
+
+        val headProvider = provider.getHeadTrackingProvider()
+        val controllerProvider = provider.getControllerTrackingProvider()
+        GazeManager.startGazeRecording(scope, headProvider)
+        DynamicManager.startDynamicRecording(scope, controllerProvider)
+        PerformanceMonitor.startMonitoring(scope)
         startSensorProcessor()
         startFlushTimer()
     }
@@ -140,7 +144,7 @@ object Cognitive3DManager {
     fun endSession()
     {
         Log.d(Util.TAG, "Cognitive3D Session Ending")
-        
+
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
@@ -154,18 +158,16 @@ object Cognitive3DManager {
         properties["Reason"] = "Quit from within app"
 
         scope.launch {
-            // Record the last known state of all dynamic objects
             DynamicManager.recordFinalDynamics()
-
-            // Send session end event
             Serialization.serializeCustomEvents("c3d.sessionEnd", properties)
-
-            // Final flush to send all remaining data before closing
             Serialization.flush()
-            
+
             sensorProcessorJob?.cancel()
             sensorProcessorJob = null
-            sensorChannel.close()
+            
+            // Close and nullify the channel so startSensorProcessor knows to recreate it next time
+            sensorChannel?.close()
+            sensorChannel = null
         }
     }
 
@@ -175,7 +177,7 @@ object Cognitive3DManager {
     private fun startFlushTimer() {
         val interval = config?.automaticSendTimer ?: 10
         if (interval <= 0) return
-        
+
         flushTimerJob?.cancel()
         flushTimerJob = scope.launch {
             while (isActive) {
@@ -196,7 +198,7 @@ object Cognitive3DManager {
     /**
      * Gathers and sets hardware and application metadata for the session.
      */
-    private fun setInternalSessionProperties(context: Context)
+    private fun setInternalSessionProperties(context: Context, provider: PlatformProvider)
     {
         val packageManager = context.packageManager
         val applicationInfo = context.applicationInfo
@@ -329,51 +331,56 @@ object Cognitive3DManager {
     @JvmStatic
     fun recordSensor(category: String, value: Float) {
         val timestamp = System.currentTimeMillis().toDouble() / 1000.0
-        val result = sensorChannel.trySend(SensorPoint(category, value, timestamp))
+        val channel = sensorChannel ?: return
+        val result = channel.trySend(SensorPoint(category, value, timestamp))
         if (result.isFailure) {
             Log.w(Util.TAG, "Failed to send sensor data for $category: ${result.exceptionOrNull()}")
         }
     }
 
     /**
-     * Registers an Entity as a dynamic object for tracking movement and state.
-     *
-     * @param name The display name of the object.
-     * @param meshName The name of the mesh associated with this object.
-     * @param entity The Scenecore Entity to track.
+     * Registers a trackable object for dynamic tracking.
      */
     @JvmStatic
-    fun registerDynamicObject(name: String, meshName: String, entity: Entity?) {
+    fun registerDynamicObject(
+        name: String,
+        meshName: String,
+        trackable: Any? = null,
+        poseProvider: (() -> PoseData?)? = null,
+        scaleProvider: (() -> Float)? = null,
+        enabledProvider: (() -> Boolean)? = null
+    ) {
         for (obj in DynamicManager.dynamics) {
-            if (obj.entity == entity) {
-                Log.w(Util.TAG, "Dynamic Object Already Registered: ${entity.toString()}")
+            if (obj.trackableRef != null && obj.trackableRef == trackable) {
+                Log.w(Util.TAG, "Dynamic Object Already Registered: $trackable")
                 return
             }
         }
 
-        var obj = DynamicObject(
+        val obj = DynamicObject(
             id = "",
             name = name,
             meshName = meshName,
-            entity = entity,
+            trackableRef = trackable,
             isController = false,
+            poseProvider = poseProvider,
+            scaleProvider = scaleProvider,
+            enabledProvider = enabledProvider,
         )
         DynamicManager.registerDynamicObject(obj)
     }
 
     /**
-     * Unregisters a previously registered dynamic entity.
-     *
-     * @param entity The Scenecore Entity to stop tracking.
+     * Unregisters a previously registered dynamic trackable.
      */
     @JvmStatic
-    fun unregisterDynamicObject(entity: Entity?) {
-        if (entity == null) return
+    fun unregisterDynamicObject(trackable: Any?) {
+        if (trackable == null) return
 
         val iterator = DynamicManager.dynamics.iterator()
         while (iterator.hasNext()) {
             val obj = iterator.next()
-            if (obj.entity == entity) {
+            if (obj.trackableRef == trackable) {
                 DynamicManager.unregisterDynamicObject(obj)
                 break
             }

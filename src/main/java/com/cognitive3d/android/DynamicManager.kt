@@ -1,41 +1,32 @@
 package com.cognitive3d.android
 
 import android.util.Log
-import androidx.xr.arcore.Hand
-import androidx.xr.arcore.HandJointType
-import androidx.xr.runtime.Session
-import androidx.xr.runtime.math.*
-import androidx.xr.scenecore.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.acos
 import kotlin.math.abs
-
-import com.cognitive3d.android.Util.toActivitySpace
-import com.cognitive3d.android.Util.toLeftHanded
 
 object DynamicManager {
 
     private var recordDynamicJob: Job? = null
     private var isRecording = false
-    private var currentSession: Session? = null
+    private var controllerProvider: ControllerTrackingProvider? = null
 
     internal val dynamics = CopyOnWriteArrayList<DynamicObject>()
 
-    fun startDynamicRecording(scope: CoroutineScope, session : Session) {
+    fun startDynamicRecording(scope: CoroutineScope, controller: ControllerTrackingProvider) {
         if (isRecording) return
         isRecording = true
-        currentSession = session
+        controllerProvider = controller
 
         registerHands()
 
         recordDynamicJob = scope.launch(Dispatchers.Default) {
             while (isActive && isRecording) {
                 val startTime = System.currentTimeMillis()
-                
+
                 try {
-                    processDynamics(session)
+                    processDynamics()
                 } catch (e: Exception) {
                     if (e !is CancellationException) {
                         Log.e(Util.TAG, "Error in dynamic recording loop", e)
@@ -51,29 +42,30 @@ object DynamicManager {
         }
     }
 
-    private suspend fun processDynamics(session: Session, force: Boolean = false) {
+    private suspend fun processDynamics(force: Boolean = false) {
         val currentTime = System.currentTimeMillis().toDouble() / 1000.0
-        
+
         for (obj in dynamics) {
             if (!obj.active) continue
 
-            // Get the current pose in Activity Space
-            val currentPose: Pose? = when {
+            // Get the current pose via provider callbacks
+            val currentPose: PoseData? = when {
                 obj.isController -> {
-                    tryGetHandPose(session, obj)
+                    val isRight = obj.controllerType == "hand_right"
+                    controllerProvider?.getHandPose(isRight)
                 }
                 else -> {
-                    obj.entity?.getPose()
+                    obj.poseProvider?.invoke()
                 }
-            }?.toLeftHanded()
+            }
 
-            val isTracked = currentPose != null &&
-                    (obj.entity?.isEnabled() ?: true)
+            val isEnabled = obj.enabledProvider?.invoke() ?: true
+            val isTracked = currentPose != null && isEnabled
             var shouldRecord = obj.isDirty || force
 
             // Handle Enabled State Change
             var propertiesJson: String? = null
-            
+
             if (!obj.hasEnabled || isTracked != obj.lastTrackedState) {
                 shouldRecord = true
                 obj.hasEnabled = true
@@ -82,33 +74,30 @@ object DynamicManager {
             }
 
             // Check Movement Thresholds
-            // Multiply by 100 only if it's an entity. Controllers (hands) stay at 1.0f.
-            val currentScaleValue = obj.entity?.let { it.getScale() * 100f } ?: 1.0f
-            obj.currentScale = Vector3(currentScaleValue, currentScaleValue, currentScaleValue)
+            // Use scale provider if available, otherwise default 1.0
+            val currentScaleValue = obj.scaleProvider?.invoke() ?: 1.0f
+            obj.currentScale = currentScaleValue
 
             if (!force && isTracked && !shouldRecord && currentPose != null) {
-                val pos = currentPose.translation
-                val rot = currentPose.rotation
-                
                 // Position check
-                val dx = pos.x - obj.lastSentPosition.x
-                val dy = pos.y - obj.lastSentPosition.y
-                val dz = pos.z - obj.lastSentPosition.z
+                val dx = currentPose.px - obj.lastSentPx
+                val dy = currentPose.py - obj.lastSentPy
+                val dz = currentPose.pz - obj.lastSentPz
                 val distSqr = dx * dx + dy * dy + dz * dz
-                
+
                 if (distSqr > obj.positionThreshold * obj.positionThreshold) {
                     shouldRecord = true
                 } else {
                     // Rotation check
-                    val dot = obj.lastSentRotation.x * rot.x + 
-                              obj.lastSentRotation.y * rot.y + 
-                              obj.lastSentRotation.z * rot.z + 
-                              obj.lastSentRotation.w * rot.w
-                              
+                    val dot = obj.lastSentRx * currentPose.rx +
+                              obj.lastSentRy * currentPose.ry +
+                              obj.lastSentRz * currentPose.rz +
+                              obj.lastSentRw * currentPose.rw
+
                     val angle = acos(dot.coerceIn(-1f, 1f).toDouble()) * 2.0 * (180.0 / Math.PI)
                     if (angle > obj.rotationThreshold) {
                         shouldRecord = true
-                    } else if (abs(currentScaleValue - obj.lastSentScale.x) > obj.scaleThreshold) {
+                    } else if (abs(currentScaleValue - obj.lastSentScale) > obj.scaleThreshold) {
                         shouldRecord = true
                     }
                 }
@@ -116,22 +105,32 @@ object DynamicManager {
 
             // Record Snapshot
             if (shouldRecord) {
-                val pos = currentPose?.translation ?: obj.lastSentPosition
-                val rot = currentPose?.rotation ?: obj.lastSentRotation
+                val px = currentPose?.px ?: obj.lastSentPx
+                val py = currentPose?.py ?: obj.lastSentPy
+                val pz = currentPose?.pz ?: obj.lastSentPz
+                val rx = currentPose?.rx ?: obj.lastSentRx
+                val ry = currentPose?.ry ?: obj.lastSentRy
+                val rz = currentPose?.rz ?: obj.lastSentRz
+                val rw = currentPose?.rw ?: obj.lastSentRw
 
                 Serialization.recordDynamic(
                     obj.id,
                     currentTime,
-                    pos.x, pos.y, pos.z,
-                    rot.x, rot.y, rot.z, rot.w,
+                    px, py, pz,
+                    rx, ry, rz, rw,
                     currentScaleValue, currentScaleValue, currentScaleValue,
                     true,
                     propertiesJson
                 )
-                
+
                 if (isTracked && currentPose != null) {
-                    obj.lastSentPosition = currentPose.translation
-                    obj.lastSentRotation = currentPose.rotation
+                    obj.lastSentPx = currentPose.px
+                    obj.lastSentPy = currentPose.py
+                    obj.lastSentPz = currentPose.pz
+                    obj.lastSentRx = currentPose.rx
+                    obj.lastSentRy = currentPose.ry
+                    obj.lastSentRz = currentPose.rz
+                    obj.lastSentRw = currentPose.rw
                     obj.lastSentScale = obj.currentScale
                 }
                 obj.isDirty = false
@@ -170,7 +169,7 @@ object DynamicManager {
      */
     fun registerDynamicObject(dynamicObject : DynamicObject) {
         dynamics.add(dynamicObject)
-        
+
         CoroutineScope(Dispatchers.IO).launch {
             Serialization.recordDynamicManifest(
                 dynamicObject.id,
@@ -187,27 +186,6 @@ object DynamicManager {
         dynamics.remove(dynamicObject)
     }
 
-    /**
-     * Safely attempts to get the hand pose in Activity Space.
-     * 
-     * @param session The current XR Session.
-     * @param obj The DynamicObject representing the hand.
-     */
-    suspend fun tryGetHandPose(session: Session, obj: DynamicObject): Pose? {
-        val isRight = obj.controllerType == "hand_right"
-        return try {
-            val hand = if (isRight) Hand.right(session) else Hand.left(session)
-            val handState = hand?.state?.first() ?: return null
-            val handPose = handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST]
-                ?: return null
-
-            // Hand poses from ARCore are in Perception Space; transform to Activity Space
-            handPose.toActivitySpace(session)
-        } catch (e: Exception) {
-            null
-        }
-    }
-    
     fun stopDynamicRecording() {
         isRecording = false
         recordDynamicJob?.cancel()
@@ -215,12 +193,11 @@ object DynamicManager {
     }
 
     suspend fun recordFinalDynamics() {
-        currentSession?.let { session ->
-            try {
-                processDynamics(session, force = true)
-            } catch (e: Exception) {
-                Log.e(Util.TAG, "Error recording final dynamics", e)
-            }
+        if (!isRecording && controllerProvider == null) return
+        try {
+            processDynamics(force = true)
+        } catch (e: Exception) {
+            Log.e(Util.TAG, "Error recording final dynamics", e)
         }
     }
 
@@ -245,20 +222,28 @@ class DynamicObject(
     var active: Boolean = true,
     var isController: Boolean = false,
     var controllerType: String = "",
-    var entity: Entity? = null,
+    var trackableRef: Any? = null,
+    var poseProvider: (() -> PoseData?)? = null,
+    var scaleProvider: (() -> Float)? = null,
+    var enabledProvider: (() -> Boolean)? = null,
 ) {
-    var currentScale: Vector3 = Vector3(1.0f, 1.0f, 1.0f)
+    var currentScale: Float = 1.0f
     var isDirty: Boolean = true
-    
+
     var hasEnabled: Boolean = false
     var lastTrackedState: Boolean = false
 
-    var lastSentPosition: Vector3 = Vector3(0f, 0f, 0f)
-    var lastSentRotation: Quaternion = Quaternion.Identity
-    var lastSentScale: Vector3 = Vector3(1f, 1f, 1f)
-    
-    var positionThreshold: Float = 0.01f 
-    var rotationThreshold: Float = 1.0f  
+    var lastSentPx: Float = 0f
+    var lastSentPy: Float = 0f
+    var lastSentPz: Float = 0f
+    var lastSentRx: Float = 0f
+    var lastSentRy: Float = 0f
+    var lastSentRz: Float = 0f
+    var lastSentRw: Float = 1f
+    var lastSentScale: Float = 1f
+
+    var positionThreshold: Float = 0.01f
+    var rotationThreshold: Float = 1.0f
     var scaleThreshold: Float = 0.1f
 
     init {

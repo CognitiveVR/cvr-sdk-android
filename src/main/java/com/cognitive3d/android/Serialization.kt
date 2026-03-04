@@ -1,8 +1,6 @@
 package com.cognitive3d.android
 
 import android.content.Context
-import androidx.xr.runtime.math.Pose
-import com.cognitive3d.android.Util.toLeftHanded
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,7 +41,7 @@ object Serialization {
     
     private val allSessionProperties = ConcurrentHashMap<String, Any>()
     private val dirtySessionProperties = ConcurrentHashMap<String, Any>()
-    private val pendingCustomEvents = mutableListOf<Triple<String?, Map<String, Any?>, Pose?>>()
+    private val pendingCustomEvents = mutableListOf<Triple<String?, Map<String, Any?>, PoseData?>>()
     
     private data class DynamicManifestEntry(
         val id: String,
@@ -131,7 +129,7 @@ object Serialization {
                     
                     val payloads = eventMutex.withLock {
                         eventsToProcess.mapNotNull { (category, properties, storedPose) ->
-                            val finalPose = storedPose?.toLeftHanded() ?: GazeManager.getHeadPose()
+                            val finalPose = storedPose ?: GazeManager.getHeadPose()
                             serializeCustomEventsInternal(category, properties, finalPose)
                         }
                     }
@@ -396,7 +394,7 @@ object Serialization {
         return eventBuilder.toString()
     }
 
-    suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: Pose? = null) {
+    suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: PoseData? = null) {
         if (!isInitialized) {
             initializationMutex.withLock {
                 if (!isInitialized) {
@@ -406,24 +404,24 @@ object Serialization {
             }
         }
 
-        val finalPose = pose?.toLeftHanded() ?: GazeManager.getHeadPose()
+        val finalPose = pose ?: GazeManager.getHeadPose()
         val payload = eventMutex.withLock {
             serializeCustomEventsInternal(category, properties, finalPose)
         }
         payload?.let { NetworkManager.send(eventURL, it) }
     }
 
-    private fun serializeCustomEventsInternal(category: String?, properties: Map<String, Any?>, pose: Pose?): String? {
+    private fun serializeCustomEventsInternal(category: String?, properties: Map<String, Any?>, pose: PoseData?): String? {
         if (eventCount > 0) eventBuilder.append(',')
-        
+
         eventBuilder.apply {
             append('{')
             appendKeyValue("name", category)
             appendKeyValue("time", System.currentTimeMillis().toDouble() / 1000.0)
             append("\"point\":[")
-            appendFloat(pose?.translation?.x ?: 0f).append(',')
-            appendFloat(pose?.translation?.y ?: 0f).append(',')
-            appendFloat(pose?.translation?.z ?: 0f).append(']')
+            appendFloat(pose?.px ?: 0f).append(',')
+            appendFloat(pose?.py ?: 0f).append(',')
+            appendFloat(pose?.pz ?: 0f).append(']')
 
             if (properties.isNotEmpty()) {
                 append(",\"properties\":{")
