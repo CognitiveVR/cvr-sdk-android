@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library") version "8.4.0"
-    id("org.jetbrains.kotlin.android") version "1.9.23"
+    id("org.jetbrains.kotlin.android") version "2.0.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.0"
     id("com.vanniktech.maven.publish") version "0.35.0"
 }
 
@@ -15,10 +16,6 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.11"
     }
 
     flavorDimensions += "platform"
@@ -67,7 +64,7 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.runtime:runtime")
     implementation("androidx.compose.material3:material3")
@@ -80,7 +77,10 @@ dependencies {
     "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
 
     // MetaQuest specific dependencies
-    // "metaQuestImplementation"("...")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk:0.9.2")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.9.2")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.9.2")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.9.2")
 }
 
 // Helper function to get properties with defaults

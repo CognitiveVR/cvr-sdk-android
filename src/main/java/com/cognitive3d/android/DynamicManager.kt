@@ -78,7 +78,7 @@ object DynamicManager {
             val currentScaleValue = obj.scaleProvider?.invoke() ?: 1.0f
             obj.currentScale = currentScaleValue
 
-            if (!force && isTracked && !shouldRecord && currentPose != null) {
+            if (!force && isTracked && !shouldRecord) {
                 // Position check
                 val dx = currentPose.px - obj.lastSentPx
                 val dy = currentPose.py - obj.lastSentPy
@@ -123,7 +123,7 @@ object DynamicManager {
                     propertiesJson
                 )
 
-                if (isTracked && currentPose != null) {
+                if (isTracked) {
                     obj.lastSentPx = currentPose.px
                     obj.lastSentPy = currentPose.py
                     obj.lastSentPz = currentPose.pz
