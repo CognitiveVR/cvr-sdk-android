@@ -21,20 +21,8 @@ android {
         kotlinCompilerExtensionVersion = "1.5.11"
     }
 
-    flavorDimensions += listOf("xrVersion", "platform")
+    flavorDimensions += "platform"
     productFlavors {
-        // xrVersion dimension
-        create("xrAlpha09") {
-            dimension = "xrVersion"
-        }
-        create("xrAlpha10") {
-            dimension = "xrVersion"
-        }
-        create("xrNone") {
-            dimension = "xrVersion"
-        }
-
-        // platform dimension
         create("androidXr") {
             dimension = "platform"
         }
@@ -73,23 +61,6 @@ android {
     }
 }
 
-// Filtering out invalid combinations
-androidComponents {
-    beforeVariants { variantBuilder ->
-        val version = variantBuilder.productFlavors.find { it.first == "xrVersion" }?.second
-        val platform = variantBuilder.productFlavors.find { it.first == "platform" }?.second
-
-        // androidXr requires a specific alpha version
-        if (platform == "androidXr" && version == "xrNone") {
-            variantBuilder.enable = false
-        }
-        // metaQuest should only be paired with xrNone
-        if (platform == "metaQuest" && version != "xrNone") {
-            variantBuilder.enable = false
-        }
-    }
-}
-
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
@@ -102,18 +73,11 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.8.2")
 
-    // Dependencies for xrAlpha09 variants
-    // This effectively only targets AndroidXr
-    "xrAlpha09Implementation"("androidx.xr.compose:compose:1.0.0-alpha09")
-    "xrAlpha09Implementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha09")
-    "xrAlpha09Implementation"("androidx.xr.runtime:runtime:1.0.0-alpha09")
-    "xrAlpha09Implementation"("androidx.xr.arcore:arcore:1.0.0-alpha09")
-
-    // Dependencies for xrAlpha10 variants
-    "xrAlpha10Implementation"("androidx.xr.compose:compose:1.0.0-alpha10")
-    "xrAlpha10Implementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
-    "xrAlpha10Implementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
-    "xrAlpha10Implementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
+    // Jetpack XR dependencies (androidXr flavor only)
+    "androidXrImplementation"("androidx.xr.compose:compose:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
 
     // MetaQuest specific dependencies
     // "metaQuestImplementation"("...")

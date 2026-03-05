@@ -17,10 +17,8 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
             if (result is SessionCreateSuccess) {
                 session = result.session
                 val newConfig = result.session.config.copy(
-                    // For androidx.xr.runtime:runtime:1.0.0-alpha09
-                    headTracking = Config.HeadTrackingMode.LAST_KNOWN,
                     // For androidx.xr.runtime:runtime:1.0.0-alpha10
-                    // deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
+                    deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
                     handTracking = Config.HandTrackingMode.BOTH
                 )
                 val configResult = result.session.configure(newConfig)
