@@ -42,99 +42,102 @@ object DynamicManager {
         }
     }
 
+    /**
+     * Processes only controller/hand dynamics, synced with gaze recording.
+     */
+    internal suspend fun processControllerDynamics(force: Boolean = false) {
+        val currentTime = System.currentTimeMillis().toDouble() / 1000.0
+        for (obj in dynamics) {
+            if (!obj.active || !obj.isController) continue
+            val isRight = obj.controllerType == "hand_right"
+            val currentPose = controllerProvider?.getHandPose(isRight)
+            processSingleDynamic(obj, currentPose, currentTime, force)
+        }
+    }
+
     private suspend fun processDynamics(force: Boolean = false) {
         val currentTime = System.currentTimeMillis().toDouble() / 1000.0
 
         for (obj in dynamics) {
-            if (!obj.active) continue
+            if (!obj.active || obj.isController) continue
+            val currentPose: PoseData? = obj.poseProvider?.invoke()
+            processSingleDynamic(obj, currentPose, currentTime, force)
+        }
+    }
 
-            // Get the current pose via provider callbacks
-            val currentPose: PoseData? = when {
-                obj.isController -> {
-                    val isRight = obj.controllerType == "hand_right"
-                    controllerProvider?.getHandPose(isRight)
-                }
-                else -> {
-                    obj.poseProvider?.invoke()
-                }
-            }
+    private suspend fun processSingleDynamic(obj: DynamicObject, currentPose: PoseData?, currentTime: Double, force: Boolean) {
+        val isEnabled = obj.enabledProvider?.invoke() ?: true
+        val isTracked = currentPose != null && isEnabled
+        var shouldRecord = obj.isDirty || force
 
-            val isEnabled = obj.enabledProvider?.invoke() ?: true
-            val isTracked = currentPose != null && isEnabled
-            var shouldRecord = obj.isDirty || force
+        // Handle Enabled State Change
+        var propertiesJson: String? = null
 
-            // Handle Enabled State Change
-            var propertiesJson: String? = null
+        if (!obj.hasEnabled || isTracked != obj.lastTrackedState) {
+            shouldRecord = true
+            obj.hasEnabled = true
+            obj.lastTrackedState = isTracked
+            propertiesJson = "{\"enabled\":$isTracked}"
+        }
 
-            if (!obj.hasEnabled || isTracked != obj.lastTrackedState) {
+        // Check Movement Thresholds
+        val currentScaleValue = obj.scaleProvider?.invoke() ?: 1.0f
+        obj.currentScale = currentScaleValue
+
+        if (!force && isTracked && !shouldRecord) {
+            val dx = currentPose.px - obj.lastSentPx
+            val dy = currentPose.py - obj.lastSentPy
+            val dz = currentPose.pz - obj.lastSentPz
+            val distSqr = dx * dx + dy * dy + dz * dz
+
+            if (distSqr > obj.positionThreshold * obj.positionThreshold) {
                 shouldRecord = true
-                obj.hasEnabled = true
-                obj.lastTrackedState = isTracked
-                propertiesJson = "{\"enabled\":$isTracked}"
-            }
+            } else {
+                val dot = obj.lastSentRx * currentPose.rx +
+                          obj.lastSentRy * currentPose.ry +
+                          obj.lastSentRz * currentPose.rz +
+                          obj.lastSentRw * currentPose.rw
 
-            // Check Movement Thresholds
-            // Use scale provider if available, otherwise default 1.0
-            val currentScaleValue = obj.scaleProvider?.invoke() ?: 1.0f
-            obj.currentScale = currentScaleValue
-
-            if (!force && isTracked && !shouldRecord) {
-                // Position check
-                val dx = currentPose.px - obj.lastSentPx
-                val dy = currentPose.py - obj.lastSentPy
-                val dz = currentPose.pz - obj.lastSentPz
-                val distSqr = dx * dx + dy * dy + dz * dz
-
-                if (distSqr > obj.positionThreshold * obj.positionThreshold) {
+                val angle = acos(dot.coerceIn(-1f, 1f).toDouble()) * 2.0 * (180.0 / Math.PI)
+                if (angle > obj.rotationThreshold) {
                     shouldRecord = true
-                } else {
-                    // Rotation check
-                    val dot = obj.lastSentRx * currentPose.rx +
-                              obj.lastSentRy * currentPose.ry +
-                              obj.lastSentRz * currentPose.rz +
-                              obj.lastSentRw * currentPose.rw
-
-                    val angle = acos(dot.coerceIn(-1f, 1f).toDouble()) * 2.0 * (180.0 / Math.PI)
-                    if (angle > obj.rotationThreshold) {
-                        shouldRecord = true
-                    } else if (abs(currentScaleValue - obj.lastSentScale) > obj.scaleThreshold) {
-                        shouldRecord = true
-                    }
+                } else if (abs(currentScaleValue - obj.lastSentScale) > obj.scaleThreshold) {
+                    shouldRecord = true
                 }
             }
+        }
 
-            // Record Snapshot
-            if (shouldRecord) {
-                val px = currentPose?.px ?: obj.lastSentPx
-                val py = currentPose?.py ?: obj.lastSentPy
-                val pz = currentPose?.pz ?: obj.lastSentPz
-                val rx = currentPose?.rx ?: obj.lastSentRx
-                val ry = currentPose?.ry ?: obj.lastSentRy
-                val rz = currentPose?.rz ?: obj.lastSentRz
-                val rw = currentPose?.rw ?: obj.lastSentRw
+        // Record Snapshot
+        if (shouldRecord) {
+            val px = currentPose?.px ?: obj.lastSentPx
+            val py = currentPose?.py ?: obj.lastSentPy
+            val pz = currentPose?.pz ?: obj.lastSentPz
+            val rx = currentPose?.rx ?: obj.lastSentRx
+            val ry = currentPose?.ry ?: obj.lastSentRy
+            val rz = currentPose?.rz ?: obj.lastSentRz
+            val rw = currentPose?.rw ?: obj.lastSentRw
 
-                Serialization.recordDynamic(
-                    obj.id,
-                    currentTime,
-                    px, py, pz,
-                    rx, ry, rz, rw,
-                    currentScaleValue, currentScaleValue, currentScaleValue,
-                    true,
-                    propertiesJson
-                )
+            Serialization.recordDynamic(
+                obj.id,
+                currentTime,
+                px, py, pz,
+                rx, ry, rz, rw,
+                currentScaleValue, currentScaleValue, currentScaleValue,
+                true,
+                propertiesJson
+            )
 
-                if (isTracked) {
-                    obj.lastSentPx = currentPose.px
-                    obj.lastSentPy = currentPose.py
-                    obj.lastSentPz = currentPose.pz
-                    obj.lastSentRx = currentPose.rx
-                    obj.lastSentRy = currentPose.ry
-                    obj.lastSentRz = currentPose.rz
-                    obj.lastSentRw = currentPose.rw
-                    obj.lastSentScale = obj.currentScale
-                }
-                obj.isDirty = false
+            if (isTracked) {
+                obj.lastSentPx = currentPose.px
+                obj.lastSentPy = currentPose.py
+                obj.lastSentPz = currentPose.pz
+                obj.lastSentRx = currentPose.rx
+                obj.lastSentRy = currentPose.ry
+                obj.lastSentRz = currentPose.rz
+                obj.lastSentRw = currentPose.rw
+                obj.lastSentScale = obj.currentScale
             }
+            obj.isDirty = false
         }
     }
 
@@ -195,6 +198,7 @@ object DynamicManager {
     suspend fun recordFinalDynamics() {
         if (!isRecording && controllerProvider == null) return
         try {
+            processControllerDynamics(force = true)
             processDynamics(force = true)
         } catch (e: Exception) {
             Log.e(Util.TAG, "Error recording final dynamics", e)

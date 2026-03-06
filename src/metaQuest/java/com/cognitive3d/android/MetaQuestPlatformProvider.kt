@@ -26,7 +26,8 @@ class MetaQuestPlatformProvider : PlatformProvider {
     }
 
     override fun getControllerTrackingProvider(): ControllerTrackingProvider {
-        return MetaQuestControllerTrackingProvider()
+        val scene = sceneReference ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized with an AppSystemActivity before requesting tracking.")
+        return MetaQuestControllerTrackingProvider(scene)
     }
 
     override fun getXrPluginName(): String = "Meta Spatial SDK"

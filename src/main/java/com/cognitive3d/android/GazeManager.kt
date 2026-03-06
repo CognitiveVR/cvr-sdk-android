@@ -24,6 +24,9 @@ object GazeManager {
                     startTime.toDouble() / 1000.0
                 )
 
+                // Record controller/hand dynamics in sync with gaze
+                DynamicManager.processControllerDynamics()
+
                 val elapsed = System.currentTimeMillis() - startTime
                 val delayTime = (Util.SNAPSHOTINTERVAL * 1000).toLong() - elapsed
                 if (delayTime > 0) delay(delayTime)
