@@ -71,8 +71,9 @@ object Cognitive3DManager {
             try {
                 val headProvider = provider.getHeadTrackingProvider()
                 val controllerProvider = provider.getControllerTrackingProvider()
+                val dynamicObjectProvider = provider.getDynamicObjectProvider()
                 GazeManager.startGazeRecording(scope, headProvider)
-                DynamicManager.startDynamicRecording(scope, controllerProvider)
+                DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
                 PerformanceMonitor.startMonitoring(scope)
                 startFlushTimer()
             } catch (e: Exception) {
@@ -133,8 +134,9 @@ object Cognitive3DManager {
 
         val headProvider = provider.getHeadTrackingProvider()
         val controllerProvider = provider.getControllerTrackingProvider()
+        val dynamicObjectProvider = provider.getDynamicObjectProvider()
         GazeManager.startGazeRecording(scope, headProvider)
-        DynamicManager.startDynamicRecording(scope, controllerProvider)
+        DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
         PerformanceMonitor.startMonitoring(scope)
         startSensorProcessor()
         startFlushTimer()
@@ -345,10 +347,7 @@ object Cognitive3DManager {
     fun registerDynamicObject(
         name: String,
         meshName: String,
-        trackable: Any? = null,
-        poseProvider: (() -> PoseData?)? = null,
-        scaleProvider: (() -> Float)? = null,
-        enabledProvider: (() -> Boolean)? = null
+        trackable: Any? = null
     ) {
         for (obj in DynamicManager.dynamics) {
             if (obj.trackableRef != null && obj.trackableRef == trackable) {
@@ -362,10 +361,7 @@ object Cognitive3DManager {
             name = name,
             meshName = meshName,
             trackableRef = trackable,
-            isController = false,
-            poseProvider = poseProvider,
-            scaleProvider = scaleProvider,
-            enabledProvider = enabledProvider,
+            isController = false
         )
         DynamicManager.registerDynamicObject(obj)
     }

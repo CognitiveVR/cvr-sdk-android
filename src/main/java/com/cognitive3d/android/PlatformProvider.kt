@@ -7,6 +7,7 @@ interface PlatformProvider {
     fun getRequiredPermissions(): Array<String>
     fun getHeadTrackingProvider(): HeadTrackingProvider
     fun getControllerTrackingProvider(): ControllerTrackingProvider
+    fun getDynamicObjectProvider(): DynamicObjectProvider
     fun getXrPluginName(): String   // "Jetpack XR SDK" vs "Meta OpenXR"
     fun destroy()
 }
