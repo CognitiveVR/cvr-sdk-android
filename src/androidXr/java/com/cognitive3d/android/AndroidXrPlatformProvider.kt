@@ -54,6 +54,10 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
         return AndroidXrControllerTrackingProvider(session!!)
     }
 
+    override fun getDynamicObjectProvider(): DynamicObjectProvider {
+        return AndroidXrDynamicObjectProvider(session!!)
+    }
+
     override fun getXrPluginName(): String = "Jetpack XR SDK"
 
     override fun destroy() {
