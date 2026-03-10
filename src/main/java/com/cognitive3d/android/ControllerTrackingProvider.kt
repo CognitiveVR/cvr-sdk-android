@@ -9,7 +9,7 @@ enum class ControllerType {
 }
 
 interface ControllerTrackingProvider {
-    fun start(scope: CoroutineScope)
+    fun start()
     fun stop()
     suspend fun getHandPose(isRight: Boolean): PoseData?
     suspend fun getControllerPose(isRight: Boolean): PoseData?
