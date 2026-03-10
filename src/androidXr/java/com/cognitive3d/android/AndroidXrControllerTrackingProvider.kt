@@ -35,7 +35,7 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
             val handState = hand?.state?.first() ?: return null
             val handPose = handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST]
                 ?: return null
-            handPose.toPoseData(session)
+            handPose.toPoseDataFromPerception(session)
         } catch (e: Exception) {
             null
         }

@@ -27,10 +27,22 @@ fun Pose.toLeftHanded(): Pose {
 }
 
 /**
- * Converts a Jetpack XR Pose to a platform-agnostic PoseData (left-handed).
+ * For Raw Tracking (Head/Hands): They are in Perception Space and NEED conversion.
  */
-fun Pose.toPoseData(session: Session): PoseData {
+fun Pose.toPoseDataFromPerception(session: Session): PoseData {
     val lh = this.toActivitySpace(session).toLeftHanded()
+    return PoseData(
+        lh.translation.x, lh.translation.y, lh.translation.z,
+        lh.rotation.x, lh.rotation.y, lh.rotation.z, lh.rotation.w
+    )
+}
+
+/**
+ * For Entities/Trackables: They are likely already in Activity Space.
+ * We ONLY flip the handedness.
+ */
+fun Pose.toPoseDataFromActivity(): PoseData {
+    val lh = this.toLeftHanded()
     return PoseData(
         lh.translation.x, lh.translation.y, lh.translation.z,
         lh.rotation.x, lh.rotation.y, lh.rotation.z, lh.rotation.w

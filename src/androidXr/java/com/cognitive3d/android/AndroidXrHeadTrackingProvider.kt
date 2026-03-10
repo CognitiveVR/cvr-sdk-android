@@ -19,7 +19,7 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
     override fun getHeadPose(): PoseData {
         val device = arDevice ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
         return try {
-            device.state.value.devicePose.toPoseData(session)
+            device.state.value.devicePose.toPoseDataFromPerception(session)
         } catch (e: Exception) {
             Log.w(Util.TAG, "Failed to read head pose", e)
             PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
