@@ -19,8 +19,6 @@ object DynamicManager {
         isRecording = true
         controllerProvider = controller
 
-        registerHands()
-
         recordDynamicJob = scope.launch(Dispatchers.Default) {
             while (isActive && isRecording) {
                 val startTime = System.currentTimeMillis()
@@ -44,13 +42,54 @@ object DynamicManager {
 
     /**
      * Processes only controller/hand dynamics, synced with gaze recording.
+     * Detects the active input type per side and registers dynamics on first detection.
      */
     internal suspend fun processControllerDynamics(force: Boolean = false) {
+        val provider = controllerProvider ?: return
         val currentTime = System.currentTimeMillis().toDouble() / 1000.0
-        for (obj in dynamics) {
-            if (!obj.active || !obj.isController) continue
-            val isRight = obj.controllerType == "hand_right"
-            val currentPose = controllerProvider?.getHandPose(isRight)
+
+        // Detect input type from either side — both sides share the same type
+        val activeType = provider.getActiveControllerType(false)
+            .takeIf { it != ControllerType.NONE }
+            ?: provider.getActiveControllerType(true)
+        if (activeType == ControllerType.NONE) return
+
+        Log.e(Util.TAG, "Active controller type: $activeType")
+
+        for (isRight in listOf(false, true)) {
+            val id = if (activeType == ControllerType.CONTROLLER) {
+                if (isRight) "2" else "1"
+            } else {
+                if (isRight) "4" else "3"
+            }
+
+            val obj = dynamics.find { it.id == id } ?: run {
+                val newObj = if (activeType == ControllerType.CONTROLLER) {
+                    DynamicObject(
+                        id = id,
+                        name = if (isRight) "Oculus Touch Controller - Right" else "Oculus Touch Controller - Left",
+                        meshName = if (isRight) "QuestPlusTouchRight" else "QuestPlusTouchLeft",
+                        isController = true,
+                        controllerType = if (isRight) "quest_plus_touch_right" else "quest_plus_touch_left"
+                    )
+                } else {
+                    DynamicObject(
+                        id = id,
+                        name = if (isRight) "RightHand" else "LeftHand",
+                        meshName = if (isRight) "handRight" else "handLeft",
+                        isController = true,
+                        controllerType = if (isRight) "hand_right" else "hand_left"
+                    )
+                }
+                registerDynamicObject(newObj)
+                newObj
+            }
+
+            val currentPose = if (activeType == ControllerType.CONTROLLER) {
+                provider.getControllerPose(isRight)
+            } else {
+                provider.getHandPose(isRight)
+            }
             processSingleDynamic(obj, currentPose, currentTime, force)
         }
     }
@@ -142,32 +181,6 @@ object DynamicManager {
     }
 
     /**
-     * Helper to register default hands for tracking.
-     * IDs are mapped to align with Dashboard expectations (1: Left, 2: Right).
-     */
-    fun registerHands() {
-        if (dynamics.any { it.id == "1" || it.id == "2" }) return
-
-        val leftHand = DynamicObject(
-            id = "1",
-            name = "Left Hand",
-            meshName = "handLeft",
-            isController = true,
-            controllerType = "hand_left"
-        )
-        registerDynamicObject(leftHand)
-
-        val rightHand = DynamicObject(
-            id = "2",
-            name = "Right Hand",
-            meshName = "handRight",
-            isController = true,
-            controllerType = "hand_right"
-        )
-        registerDynamicObject(rightHand)
-    }
-
-    /**
      * Registers a dynamic object and sends its manifest entry.
      */
     fun registerDynamicObject(dynamicObject : DynamicObject) {
@@ -196,7 +209,6 @@ object DynamicManager {
     }
 
     suspend fun recordFinalDynamics() {
-        if (!isRecording && controllerProvider == null) return
         try {
             processControllerDynamics(force = true)
             processDynamics(force = true)
