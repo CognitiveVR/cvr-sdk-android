@@ -54,8 +54,6 @@ object DynamicManager {
             ?: provider.getActiveControllerType(true)
         if (activeType == ControllerType.NONE) return
 
-        Log.e(Util.TAG, "Active controller type: $activeType")
-
         for (isRight in listOf(false, true)) {
             val id = if (activeType == ControllerType.CONTROLLER) {
                 if (isRight) "2" else "1"
