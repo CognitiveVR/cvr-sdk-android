@@ -1,6 +1,6 @@
 plugins {
     id("com.android.library") version "8.4.0"
-    id("org.jetbrains.kotlin.android") version "2.0.0"
+    id("org.jetbrains.kotlin.android") version "2.1.0"
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.0"
     id("com.vanniktech.maven.publish") version "0.35.0"
 }
@@ -77,10 +77,10 @@ dependencies {
     "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
 
     // MetaQuest specific dependencies
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk:0.9.2")
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.9.2")
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.9.2")
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.9.2")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk:0.10.1")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.10.1")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.10.1")
+    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.10.1")
 }
 
 // Helper function to get properties with defaults
