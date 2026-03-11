@@ -11,13 +11,20 @@ object DynamicManager {
     private var recordDynamicJob: Job? = null
     private var isRecording = false
     private var controllerProvider: ControllerTrackingProvider? = null
+    private var lastActiveType: ControllerType = ControllerType.NONE
+    private var dynamicObjectProvider: DynamicObjectProvider? = null
 
     internal val dynamics = CopyOnWriteArrayList<DynamicObject>()
 
-    fun startDynamicRecording(scope: CoroutineScope, controller: ControllerTrackingProvider) {
+    fun startDynamicRecording(
+        scope: CoroutineScope,
+        controller: ControllerTrackingProvider,
+        dynamicProvider: DynamicObjectProvider
+    ) {
         if (isRecording) return
         isRecording = true
         controllerProvider = controller
+        dynamicObjectProvider = dynamicProvider
 
         recordDynamicJob = scope.launch(Dispatchers.Default) {
             while (isActive && isRecording) {
@@ -88,22 +95,45 @@ object DynamicManager {
             } else {
                 provider.getHandPose(isRight)
             }
-            processSingleDynamic(obj, currentPose, currentTime, force)
+            processSingleDynamic(obj, currentPose, null, null, currentTime, force)
+
+            // On type switch, disable the counterpart
+            if (activeType != lastActiveType) {
+                val inactiveId = if (activeType == ControllerType.CONTROLLER) {
+                    if (isRight) "4" else "3" // Hands
+                } else {
+                    if (isRight) "2" else "1" // Controllers
+                }
+                val inactiveObj = dynamics.find { it.id == inactiveId } ?: continue
+                processSingleDynamic(inactiveObj, null, null, false, currentTime, force)
+            }
         }
+        lastActiveType = activeType
     }
 
     private suspend fun processDynamics(force: Boolean = false) {
+        val provider = dynamicObjectProvider ?: return
         val currentTime = System.currentTimeMillis().toDouble() / 1000.0
 
         for (obj in dynamics) {
-            if (!obj.active || obj.isController) continue
-            val currentPose: PoseData? = obj.poseProvider?.invoke()
-            processSingleDynamic(obj, currentPose, currentTime, force)
+            if (obj.isController) continue
+
+            val state = obj.trackableRef?.let {
+                provider.getStateFromTrackable(it)
+            }
+            processSingleDynamic(obj, state?.pose, state?.scale, state?.enabled, currentTime, force)
         }
     }
 
-    private suspend fun processSingleDynamic(obj: DynamicObject, currentPose: PoseData?, currentTime: Double, force: Boolean) {
-        val isEnabled = obj.enabledProvider?.invoke() ?: true
+    private suspend fun processSingleDynamic(
+        obj: DynamicObject,
+        currentPose: PoseData?,
+        currentScale: ScaleData?,
+        currentEnabled: Boolean?,
+        currentTime: Double,
+        force: Boolean
+    ) {
+        val isEnabled = currentEnabled ?: true
         val isTracked = currentPose != null && isEnabled
         var shouldRecord = obj.isDirty || force
 
@@ -118,7 +148,7 @@ object DynamicManager {
         }
 
         // Check Movement Thresholds
-        val currentScaleValue = obj.scaleProvider?.invoke() ?: 1.0f
+        val currentScaleValue = currentScale ?: ScaleData(1f, 1f, 1f)
         obj.currentScale = currentScaleValue
 
         if (!force && isTracked && !shouldRecord) {
@@ -138,7 +168,9 @@ object DynamicManager {
                 val angle = acos(dot.coerceIn(-1f, 1f).toDouble()) * 2.0 * (180.0 / Math.PI)
                 if (angle > obj.rotationThreshold) {
                     shouldRecord = true
-                } else if (abs(currentScaleValue - obj.lastSentScale) > obj.scaleThreshold) {
+                } else if (abs(currentScaleValue.sx - obj.lastSentScaleX) > obj.scaleThreshold ||
+                           abs(currentScaleValue.sy - obj.lastSentScaleY) > obj.scaleThreshold ||
+                           abs(currentScaleValue.sz - obj.lastSentScaleZ) > obj.scaleThreshold) {
                     shouldRecord = true
                 }
             }
@@ -159,7 +191,7 @@ object DynamicManager {
                 currentTime,
                 px, py, pz,
                 rx, ry, rz, rw,
-                currentScaleValue, currentScaleValue, currentScaleValue,
+                currentScaleValue.sx, currentScaleValue.sy, currentScaleValue.sz,
                 true,
                 propertiesJson
             )
@@ -172,7 +204,9 @@ object DynamicManager {
                 obj.lastSentRy = currentPose.ry
                 obj.lastSentRz = currentPose.rz
                 obj.lastSentRw = currentPose.rw
-                obj.lastSentScale = obj.currentScale
+                obj.lastSentScaleX = obj.currentScale.sx
+                obj.lastSentScaleY = obj.currentScale.sy
+                obj.lastSentScaleZ = obj.currentScale.sz
             }
             obj.isDirty = false
         }
@@ -236,12 +270,9 @@ class DynamicObject(
     var active: Boolean = true,
     var isController: Boolean = false,
     var controllerType: String = "",
-    var trackableRef: Any? = null,
-    var poseProvider: (() -> PoseData?)? = null,
-    var scaleProvider: (() -> Float)? = null,
-    var enabledProvider: (() -> Boolean)? = null,
+    var trackableRef: Any? = null
 ) {
-    var currentScale: Float = 1.0f
+    var currentScale: ScaleData = ScaleData(1f, 1f, 1f)
     var isDirty: Boolean = true
 
     var hasEnabled: Boolean = false
@@ -254,7 +285,9 @@ class DynamicObject(
     var lastSentRy: Float = 0f
     var lastSentRz: Float = 0f
     var lastSentRw: Float = 1f
-    var lastSentScale: Float = 1f
+    var lastSentScaleX: Float = 1f
+    var lastSentScaleY: Float = 1f
+    var lastSentScaleZ: Float = 1f
 
     var positionThreshold: Float = 0.01f
     var rotationThreshold: Float = 1.0f
