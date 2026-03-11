@@ -11,6 +11,6 @@ interface DynamicObjectProvider {
 
 data class DynamicTrackableState(
     val pose: PoseData?,
-    val scale: Float?,
+    val scale: ScaleData?,
     val enabled: Boolean?
 )
