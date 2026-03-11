@@ -48,3 +48,10 @@ fun Pose.toPoseDataFromActivity(): PoseData {
         lh.rotation.x, lh.rotation.y, lh.rotation.z, lh.rotation.w
     )
 }
+
+/**
+ * Converts a uniform scale factor into a 3-axis ScaleData (applies equally to x, y, z).
+ */
+fun Float.toScaleData(): ScaleData {
+    return ScaleData(this, this, this)
+}

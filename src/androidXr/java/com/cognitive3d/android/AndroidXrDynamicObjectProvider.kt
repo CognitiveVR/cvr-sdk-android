@@ -7,7 +7,7 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
     override fun getStateFromTrackable(trackable: Any): DynamicTrackableState? {
         if (trackable is Entity) {
             val pose = trackable.getPose().toPoseDataFromActivity()
-            val scale = trackable.getScale()
+            val scale = trackable.getScale().toScaleData()
             val enabled = trackable.isEnabled()
             return DynamicTrackableState(pose, scale, enabled)
         }
