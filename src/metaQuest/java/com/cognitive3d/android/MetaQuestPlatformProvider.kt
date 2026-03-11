@@ -30,6 +30,10 @@ class MetaQuestPlatformProvider : PlatformProvider {
         return MetaQuestControllerTrackingProvider(scene)
     }
 
+    override fun getDynamicObjectProvider(): DynamicObjectProvider {
+        return MetaQuestDynamicObjectProvider()
+    }
+
     override fun getXrPluginName(): String = "Meta Spatial SDK"
 
     override fun destroy() {
