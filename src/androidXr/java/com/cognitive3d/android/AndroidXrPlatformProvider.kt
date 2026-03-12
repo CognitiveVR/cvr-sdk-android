@@ -1,5 +1,6 @@
 package com.cognitive3d.android
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.util.Log
 import androidx.xr.runtime.Config
@@ -11,6 +12,7 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
 
     private var session: Session? = null
 
+    @SuppressLint("RestrictedApi")
     override fun initialize(activity: Activity): Boolean {
         return try {
             val result = Session.create(activity)
@@ -19,7 +21,8 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
                 val newConfig = result.session.config.copy(
                     // For androidx.xr.runtime:runtime:1.0.0-alpha10
                     deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
-                    handTracking = Config.HandTrackingMode.BOTH
+                    handTracking = Config.HandTrackingMode.BOTH,
+                    eyeTracking = Config.EyeTrackingMode.FINE_TRACKING
                 )
                 val configResult = result.session.configure(newConfig)
                 if (configResult is SessionConfigureSuccess) {
@@ -43,7 +46,9 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
 
     override fun getRequiredPermissions(): Array<String> = arrayOf(
         "android.permission.HEAD_TRACKING",
-        "android.permission.HAND_TRACKING"
+        "android.permission.HAND_TRACKING",
+        "android.permission.EYE_TRACKING_COARSE",
+        "android.permission.EYE_TRACKING_FINE"
     )
 
     override fun getHeadTrackingProvider(): HeadTrackingProvider {

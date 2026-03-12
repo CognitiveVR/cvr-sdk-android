@@ -3,5 +3,7 @@
 
     <uses-permission android:name="android.permission.HEAD_TRACKING" />
     <uses-permission android:name="android.permission.HAND_TRACKING" />
+    <uses-permission android:name="android.permission.EYE_TRACKING_COARSE" />
+    <uses-permission android:name="android.permission.EYE_TRACKING_FINE" />
 
 </manifest>
