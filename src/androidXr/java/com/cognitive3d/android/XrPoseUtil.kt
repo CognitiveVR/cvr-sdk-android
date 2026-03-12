@@ -38,6 +38,18 @@ fun Pose.toPoseDataFromPerception(session: Session): PoseData {
 }
 
 /**
+ * For gaze ray from perception space: converts to activity space, flips handedness,
+ * then extracts position + forward direction as a GazeRayData.
+ */
+fun Pose.toGazeRayFromPerception(session: Session): GazeRayData {
+    val lh = this.toActivitySpace(session).toLeftHanded()
+    return GazeRayData(
+        lh.translation.x, lh.translation.y, lh.translation.z,
+        lh.forward.x, lh.forward.y, lh.forward.z
+    )
+}
+
+/**
  * For Entities/Trackables: They are likely already in Activity Space.
  * We ONLY flip the handedness.
  */
