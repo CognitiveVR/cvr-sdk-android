@@ -8,3 +8,9 @@ data class PoseData(
 data class ScaleData(
     val sx: Float, val sy: Float, val sz: Float
 )
+
+/** Ray origin (position) + forward direction for gaze raycasting. */
+data class GazeRayData(
+    val px: Float, val py: Float, val pz: Float,
+    val fx: Float, val fy: Float, val fz: Float
+)
