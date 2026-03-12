@@ -219,12 +219,12 @@ object Serialization {
     /**
      * Records a single gaze snapshot, typically representing the user's head pose.
      */
-    suspend fun recordGaze(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, timestamp: Double) {
+    suspend fun recordGaze(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, gx: Float, gy: Float, gz: Float, timestamp: Double) {
         if (!isInitialized) return
-        
+
         val payload = gazeMutex.withLock {
             if (gazeCount > 0) gazeBuilder.append(',')
-            gazeBuilder.appendGazePoint(timestamp, px, py, pz, rx, ry, rz, rw)
+            gazeBuilder.appendGazePoint(timestamp, px, py, pz, rx, ry, rz, rw, gx, gy, gz)
             gazeCount++
 
             if (gazeCount >= GAZE_THRESHOLD) {
@@ -245,7 +245,7 @@ object Serialization {
         return gazeBuilder.toString()
     }
 
-    private fun StringBuilder.appendGazePoint(time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float) {
+    private fun StringBuilder.appendGazePoint(time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, gx: Float, gy: Float, gz: Float) {
         append("{\"time\":").append(time)
         append(",\"p\":[")
         appendFloat(px).append(',')
@@ -256,6 +256,10 @@ object Serialization {
         appendFloat(ry).append(',')
         appendFloat(rz).append(',')
         appendFloat(rw).append(']')
+        append(",\"g\":[")
+        appendFloat(gx).append(',')
+        appendFloat(gy).append(',')
+        appendFloat(gz).append(']')
         append('}')
     }
 
