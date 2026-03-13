@@ -347,7 +347,8 @@ object Cognitive3DManager {
     fun registerDynamicObject(
         name: String,
         meshName: String,
-        trackable: Any? = null
+        trackable: Any? = null,
+        id: String? = null
     ) {
         for (obj in DynamicManager.dynamics) {
             if (obj.trackableRef != null && obj.trackableRef == trackable) {
@@ -357,7 +358,7 @@ object Cognitive3DManager {
         }
 
         val obj = DynamicObject(
-            id = "",
+            id = id ?: "",
             name = name,
             meshName = meshName,
             trackableRef = trackable,
