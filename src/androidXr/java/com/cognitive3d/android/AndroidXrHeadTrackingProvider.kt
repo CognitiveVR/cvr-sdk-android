@@ -70,20 +70,20 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
         if (!leftState.isOpen || !rightState.isOpen) return null
 
         val devicePose = device.state.value.devicePose
-        val headPose = session.scene.perceptionSpace.getScenePoseFromPerceptionPose(devicePose)
+        val deviceInActivity = devicePose.toActivitySpace(session)
 
-        val leftPose = headPose.transformPoseTo(leftState.pose, session.scene.activitySpace)
-        val rightPose = headPose.transformPoseTo(rightState.pose, session.scene.activitySpace)
+        val leftInActivity = deviceInActivity.compose(leftState.pose)
+        val rightInActivity = deviceInActivity.compose(rightState.pose)
 
         // Position from device, rotation from averaged eye gaze
-        val deviceInActivity = devicePose.toActivitySpace(session)
-        val gazeRotation = slerp(leftPose.rotation, rightPose.rotation, 0.5f)
+        val gazeRotation = slerp(leftInActivity.rotation, rightInActivity.rotation, 0.5f)
 
-        val combined = Pose(deviceInActivity.translation, gazeRotation).toLeftHanded()
+        val combined = Pose(deviceInActivity.translation, gazeRotation)
 
         return GazeRayData(
-            combined.translation.x, combined.translation.y, combined.translation.z,
-            combined.forward.x, combined.forward.y, combined.forward.z
+            combined.translation.x, combined.translation.y, -combined.translation.z,
+            // Flip the direction to point along the +Z axis in Left-Handed space
+            combined.forward.x, combined.forward.y, -combined.forward.z
         )
     }
 
