@@ -42,10 +42,10 @@ fun Pose.toPoseDataFromPerception(session: Session): PoseData {
  * then extracts position + forward direction as a GazeRayData.
  */
 fun Pose.toGazeRayFromPerception(session: Session): GazeRayData {
-    val lh = this.toActivitySpace(session).toLeftHanded()
+    val lh = this.toActivitySpace(session)
     return GazeRayData(
-        lh.translation.x, lh.translation.y, lh.translation.z,
-        lh.forward.x, lh.forward.y, lh.forward.z
+        lh.translation.x, lh.translation.y, -lh.translation.z,
+        lh.forward.x, lh.forward.y, -lh.forward.z
     )
 }
 
