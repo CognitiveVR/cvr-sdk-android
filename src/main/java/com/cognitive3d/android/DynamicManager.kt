@@ -217,6 +217,7 @@ object DynamicManager {
      */
     fun registerDynamicObject(dynamicObject : DynamicObject) {
         dynamics.add(dynamicObject)
+        dynamicObjectProvider?.attachHitDetection(dynamicObject)
 
         CoroutineScope(Dispatchers.IO).launch {
             Serialization.recordDynamicManifest(
@@ -231,6 +232,7 @@ object DynamicManager {
 
     fun unregisterDynamicObject(dynamicObject: DynamicObject) {
         if (dynamicObject.isController) return // Hands should generally not be unregistered
+        dynamicObjectProvider?.detachHitDetection(dynamicObject)
         dynamics.remove(dynamicObject)
     }
 
@@ -267,7 +269,6 @@ class DynamicObject(
     var id: String = "",
     var name: String = "",
     var meshName: String = "",
-    var active: Boolean = true,
     var isController: Boolean = false,
     var controllerType: String = "",
     var trackableRef: Any? = null
