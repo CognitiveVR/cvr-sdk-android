@@ -7,6 +7,9 @@ interface DynamicObjectProvider {
      * Returns null if the trackable is unrecognized or pose is unavailable.
      */
     fun getStateFromTrackable(trackable: Any): DynamicTrackableState?
+    fun attachHitDetection(dynamicObject: DynamicObject) {}
+    fun detachHitDetection(dynamicObject: DynamicObject) {}
+    fun getLatestGazeHit(gazeRay: GazeRayData, maxDistance: Float): GazeHitResult? = null
 }
 
 data class DynamicTrackableState(
