@@ -7,19 +7,17 @@ object GazeManager {
     private var isRecording = false
     private var headTrackingProvider: HeadTrackingProvider? = null
     private var dynamicObjectProvider: DynamicObjectProvider? = null
-    private var gazeMaxDistance: Float = 100f
+    private val gazeMaxDistance: Float = 100f
 
     fun startGazeRecording(
         scope: CoroutineScope,
         provider: HeadTrackingProvider,
-        dynamicProvider: DynamicObjectProvider? = null,
-        maxDistance: Float = 100f
+        dynamicProvider: DynamicObjectProvider? = null
     ) {
         if (isRecording) return
         isRecording = true
         headTrackingProvider = provider
         dynamicObjectProvider = dynamicProvider
-        gazeMaxDistance = maxDistance
         provider.start(scope)
 
         recordGazeJob = scope.launch(Dispatchers.Default) {
