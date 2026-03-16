@@ -67,3 +67,26 @@ fun Pose.toPoseDataFromActivity(): PoseData {
 fun Float.toScaleData(): ScaleData {
     return ScaleData(this, this, this)
 }
+
+fun Quaternion.conjugate(): Quaternion {
+    return Quaternion(-x, -y, -z, w)
+}
+
+fun Quaternion.rotate(v: Vector3): Vector3 {
+    val qx = x; val qy = y; val qz = z; val qw = w
+    val tx = 2f * (qy * v.z - qz * v.y)
+    val ty = 2f * (qz * v.x - qx * v.z)
+    val tz = 2f * (qx * v.y - qy * v.x)
+    return Vector3(
+        v.x + qw * tx + (qy * tz - qz * ty),
+        v.y + qw * ty + (qz * tx - qx * tz),
+        v.z + qw * tz + (qx * ty - qy * tx)
+    )
+}
+
+fun Pose.inverse(): Pose {
+    val invRot = rotation.conjugate()
+    val negT = Vector3(-translation.x, -translation.y, -translation.z)
+    val invT = invRot.rotate(negT)
+    return Pose(invT, invRot)
+}
