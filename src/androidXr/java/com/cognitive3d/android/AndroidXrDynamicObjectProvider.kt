@@ -40,7 +40,7 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
     }
 
     override fun detachHitDetection(dynamicObject: DynamicObject) {
-        if (dynamicObject.trackableRef !is Entity) return
+        if (dynamicObject.trackableRef !is GltfModelEntity) return
         boundingBoxes.remove(dynamicObject.id)
     }
 
@@ -103,12 +103,17 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
                 )
                 val worldHit = worldPose.transformPoint(localHit)
 
+                // Local hit in model space
+                val invScale = if (scale != 0f) 1f / scale else 0f
                 closestHit = GazeHitResult(
                     objectId = obj.id,
                     distance = dist,
                     hitX = worldHit.x,
                     hitY = worldHit.y,
-                    hitZ = -worldHit.z  // Flip Z back to left-handed
+                    hitZ = -worldHit.z,  // Flip Z back to left-handed
+                    localHitX = localHit.x * invScale,
+                    localHitY = localHit.y * invScale,
+                    localHitZ = -localHit.z * invScale  // Flip Z for left-handed
                 )
                 closestDist = dist
             }

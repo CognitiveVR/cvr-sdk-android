@@ -19,5 +19,6 @@ data class GazeRayData(
 data class GazeHitResult(
     val objectId: String,
     val distance: Float,
-    val hitX: Float, val hitY: Float, val hitZ: Float
+    val hitX: Float, val hitY: Float, val hitZ: Float,           // world space (for debug visuals)
+    val localHitX: Float, val localHitY: Float, val localHitZ: Float  // object-local space
 )

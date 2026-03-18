@@ -34,9 +34,9 @@ object GazeManager {
 
                 if (hit != null) {
                     gazePoint = FloatArray(3)
-                    gazePoint[0] = hit.hitX
-                    gazePoint[1] = hit.hitY
-                    gazePoint[2] = hit.hitZ
+                    gazePoint[0] = hit.localHitX
+                    gazePoint[1] = hit.localHitY
+                    gazePoint[2] = hit.localHitZ
                     objectId = hit.objectId
                 } else {
                     gazePoint = null
