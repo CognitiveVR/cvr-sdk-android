@@ -23,7 +23,7 @@ android {
         create("androidXr") {
             dimension = "platform"
         }
-        create("metaQuest") {
+        create("metaSpatial") {
             dimension = "platform"
         }
     }
@@ -35,8 +35,8 @@ android {
         getByName("androidXr") {
             java.srcDirs("src/androidXr/java")
         }
-        getByName("metaQuest") {
-            java.srcDirs("src/metaQuest/java")
+        getByName("metaSpatial") {
+            java.srcDirs("src/metaSpatial/java")
         }
     }
 
@@ -76,11 +76,11 @@ dependencies {
     "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
     "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
 
-    // MetaQuest specific dependencies
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk:0.10.1")
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.10.1")
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.10.1")
-    "metaQuestImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.10.1")
+    // Meta Spatial SDK dependencies (metaSpatial flavor only)
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.10.1")
 }
 
 // Helper function to get properties with defaults
@@ -88,14 +88,23 @@ fun getProperty(key: String, default: String = ""): String {
     return providers.gradleProperty(key).getOrElse(default)
 }
 
+// Determine which flavor to publish (pass -PFLAVOR=androidXr or -PFLAVOR=metaSpatial)
+val flavorToBuild = providers.gradleProperty("FLAVOR").getOrElse("androidXr")
+
 mavenPublishing {
+    val artifactId = when (flavorToBuild) {
+        "metaSpatial" -> "meta-spatial-sdk"
+        else -> "android-xr-sdk"
+    }
+
     coordinates(
         getProperty("GROUP"),
-        getProperty("POM_ARTIFACT_ID"),
+        artifactId,
         getProperty("VERSION_NAME")
     )
 
-    configure(com.vanniktech.maven.publish.AndroidMultiVariantLibrary(
+    configure(com.vanniktech.maven.publish.AndroidSingleVariantLibrary(
+        variant = "${flavorToBuild}Release",
         sourcesJar = true,
         publishJavadocJar = true
     ))
