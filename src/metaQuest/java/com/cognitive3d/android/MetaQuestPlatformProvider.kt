@@ -31,7 +31,13 @@ class MetaQuestPlatformProvider : PlatformProvider {
     }
 
     override fun getDynamicObjectProvider(): DynamicObjectProvider {
-        return MetaQuestDynamicObjectProvider()
+        val provider = MetaQuestDynamicObjectProvider()
+        if (MetaQuestGazeDebugVisualizer.enabled) {
+            val visualizer = MetaQuestGazeDebugVisualizer()
+            visualizer.initialize()
+            provider.debugVisualizer = visualizer
+        }
+        return provider
     }
 
     override fun getXrPluginName(): String = "Meta Spatial SDK"

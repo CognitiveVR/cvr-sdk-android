@@ -13,6 +13,7 @@ import kotlin.math.sqrt
 
 class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
     private val boundingBoxes = ConcurrentHashMap<String, BoundingBoxData>()
+    internal var debugVisualizer: MetaQuestGazeDebugVisualizer? = null
 
     private data class BoundingBoxData(
         val minX: Float, val minY: Float, val minZ: Float,
@@ -37,19 +38,27 @@ class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
         val entity = dynamicObject.trackableRef as? Entity ?: return
         try {
             val bbox = entity.getComponent<Box>()
-            boundingBoxes[dynamicObject.id] = BoundingBoxData(
+            val bbd = BoundingBoxData(
                 bbox.min.x, bbox.min.y, bbox.min.z,
                 bbox.max.x, bbox.max.y, bbox.max.z
+            )
+            boundingBoxes[dynamicObject.id] = bbd
+            debugVisualizer?.addBoundingBox(
+                dynamicObject.id, bbd.minX, bbd.minY, bbd.minZ, bbd.maxX, bbd.maxY, bbd.maxZ
             )
         } catch (_: Exception) {
             entity.setComponent(Box(Vector3(-0.5f, -0.5f, -0.05f), Vector3(0.5f, 0.5f, 0.05f)))
             boundingBoxes[dynamicObject.id] = BoundingBoxData(-0.5f, -0.5f, -0.05f, 0.5f, 0.5f, 0.05f)
+            debugVisualizer?.addBoundingBox(
+                dynamicObject.id, -0.5f, -0.5f, -0.05f, 0.5f, 0.5f, 0.05f
+            )
         }
     }
 
     override fun detachHitDetection(dynamicObject: DynamicObject) {
         if (dynamicObject.trackableRef !is Entity) return
         boundingBoxes.remove(dynamicObject.id)
+        debugVisualizer?.removeBoundingBox(dynamicObject.id)
     }
 
     override fun getLatestGazeHit(gazeRay: GazeRayData, maxDistance: Float): GazeHitResult? {
@@ -133,6 +142,12 @@ class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
                 closestHit = GazeHitResult(obj.id, realDist, whX, whY, whZ, slhX, slhY, slhZ)
                 closestDist = realDist
             }
+        }
+
+        // Update debug visuals (hit marker + bounding box positions)
+        debugVisualizer?.let {
+            it.updateHitPoint(closestHit)
+            it.updateBoundingBoxTransforms()
         }
 
         return closestHit
