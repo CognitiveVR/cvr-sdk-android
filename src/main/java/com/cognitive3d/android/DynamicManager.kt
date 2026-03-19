@@ -25,6 +25,7 @@ object DynamicManager {
         isRecording = true
         controllerProvider = controller
         dynamicObjectProvider = dynamicProvider
+        controllerProvider?.start()
 
         recordDynamicJob = scope.launch(Dispatchers.Default) {
             while (isActive && isRecording) {
@@ -240,6 +241,7 @@ object DynamicManager {
         isRecording = false
         recordDynamicJob?.cancel()
         recordDynamicJob = null
+        controllerProvider?.stop()
     }
 
     suspend fun recordFinalDynamics() {

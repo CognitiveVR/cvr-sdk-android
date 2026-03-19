@@ -3,22 +3,26 @@ package com.cognitive3d.android
 import androidx.xr.arcore.Hand
 import androidx.xr.arcore.HandJointType
 import androidx.xr.runtime.Session
-import kotlinx.coroutines.flow.first
 
 class AndroidXrControllerTrackingProvider(private val session: Session) : ControllerTrackingProvider {
 
+    private var leftHand: Hand? = null
+    private var rightHand: Hand? = null
+
     override fun start() {
-        // Hand tracking is started via Session configuration; no additional setup needed
+        leftHand = Hand.left(session)
+        rightHand = Hand.right(session)
     }
 
     override fun stop() {
-        // No-op; hand tracking lifecycle is managed by the Session
+        leftHand = null
+        rightHand = null
     }
 
     override suspend fun getActiveControllerType(isRight: Boolean): ControllerType {
         return try {
-            val hand = if (isRight) Hand.right(session) else Hand.left(session)
-            val handState = hand?.state?.first() ?: return ControllerType.NONE
+            val hand = if (isRight) rightHand else leftHand
+            val handState = hand?.state?.value ?: return ControllerType.NONE
             if (handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST] != null) {
                 ControllerType.HAND
             } else {
@@ -31,8 +35,8 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
 
     override suspend fun getHandPose(isRight: Boolean): PoseData? {
         return try {
-            val hand = if (isRight) Hand.right(session) else Hand.left(session)
-            val handState = hand?.state?.first() ?: return null
+            val hand = if (isRight) rightHand else leftHand
+            val handState = hand?.state?.value ?: return null
             val handPose = handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST]
                 ?: return null
             handPose.toPoseDataFromPerception(session)
