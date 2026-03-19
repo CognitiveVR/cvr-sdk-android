@@ -218,7 +218,7 @@ object Cognitive3DManager {
         setSessionProperty("c3d.app.engine.version", "Android SDK " + Build.VERSION.SDK_INT)
         setSessionProperty("c3d.app.version", appVersion)
         setSessionProperty("c3d.app.sdktype", "Default")
-        setSessionProperty("c3d.app.xrplugin", "Jetpack XR SDK")
+        setSessionProperty("c3d.app.xrplugin", provider.getXrPluginName())
         setSessionProperty("c3d.app.inEditor", false)
         setSessionProperty("c3d.app.name", appName)
 
