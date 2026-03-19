@@ -268,9 +268,36 @@ object Serialization {
             appendFloat(gazePoint[2]).append(']')
         }
         if (objectId != null) {
-            append(",\"o\":\"").append(objectId).append('"')
+            append(",\"o\":\"").appendJsonString(objectId)
         }
         append('}')
+    }
+
+    internal fun StringBuilder.appendJsonString(value: String): StringBuilder {
+        append('"')
+        for (ch in value) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '\"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> {
+                    if (ch < ' ') {
+                        append("\\u")
+                        val code = ch.code
+                        val hex = code.toString(16).padStart(4, '0')
+                        append(hex)
+                    } else {
+                        append(ch)
+                    }
+                }
+            }
+        }
+        append('"')
+        return this
     }
 
     private fun StringBuilder.appendFloat(value: Float): StringBuilder {

@@ -1,6 +1,5 @@
 package com.cognitive3d.android
 
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import com.meta.spatial.core.Pose
 import com.meta.spatial.runtime.Scene

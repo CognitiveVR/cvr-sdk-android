@@ -164,7 +164,7 @@ class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
             tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
         } else if (oz !in minZ..maxZ) return null
 
-        // Reject: no intersection, behind ray, or ray origin inside box
+        // Reject: no intersection, behind ray
         if (tMin > tMax || tMax < 0f) return null
         return if (tMin >= 0f) tMin else tMax
     }

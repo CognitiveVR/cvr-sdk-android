@@ -1,7 +1,5 @@
 package com.cognitive3d.android
 
-import kotlinx.coroutines.CoroutineScope
-
 /** The type of input device currently active. */
 enum class ControllerType {
     HAND,
