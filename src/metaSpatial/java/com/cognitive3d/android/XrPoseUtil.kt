@@ -15,12 +15,14 @@ fun Pose.toPoseData(): PoseData {
     )
 }
 
+/** Converts a Meta Spatial SDK Scale component to a platform-agnostic ScaleData. */
 fun Scale.toScaleData(): ScaleData {
     return ScaleData(
         this.scale.x, this.scale.y, this.scale.z
     )
 }
 
+/** Rotates a vector by this quaternion using the Hamilton product. */
 fun Quaternion.rotate(v: Vector3): Vector3 {
     val tx = 2f * (y * v.z - z * v.y)
     val ty = 2f * (z * v.x - x * v.z)

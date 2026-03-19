@@ -68,10 +68,12 @@ fun Float.toScaleData(): ScaleData {
     return ScaleData(this, this, this)
 }
 
+/** Returns the conjugate (inverse rotation) of this quaternion. */
 fun Quaternion.conjugate(): Quaternion {
     return Quaternion(-x, -y, -z, w)
 }
 
+/** Rotates a vector by this quaternion using the Hamilton product. */
 fun Quaternion.rotate(v: Vector3): Vector3 {
     val qx = x; val qy = y; val qz = z; val qw = w
     val tx = 2f * (qy * v.z - qz * v.y)
@@ -84,6 +86,7 @@ fun Quaternion.rotate(v: Vector3): Vector3 {
     )
 }
 
+/** Returns the inverse of this pose (negated translation rotated by the conjugate). */
 fun Pose.inverse(): Pose {
     val invRot = rotation.conjugate()
     val negT = Vector3(-translation.x, -translation.y, -translation.z)

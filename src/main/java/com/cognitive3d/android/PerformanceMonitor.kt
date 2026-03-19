@@ -4,6 +4,10 @@ import android.util.Log
 import android.view.Choreographer
 import kotlinx.coroutines.*
 
+/**
+ * Monitors application frame rate using Choreographer callbacks
+ * and reports the average FPS as a sensor value every second.
+ */
 object PerformanceMonitor {
     private var frameCount = 0
     private var isRunning = false

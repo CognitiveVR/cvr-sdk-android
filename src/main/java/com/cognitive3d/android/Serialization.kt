@@ -6,6 +6,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Serializes gaze, dynamic object, event, sensor, and boundary data into JSON payloads.
+ * Buffers data in StringBuilders and flushes to the network when thresholds are reached
+ * or on a timed interval.
+ */
 object Serialization {
     private var gatewayURL: String = "https://data.cognitive3d.com"
     private var eventURL: String = ""

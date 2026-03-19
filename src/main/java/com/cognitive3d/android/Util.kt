@@ -8,6 +8,7 @@ import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.opengles.GL10
 import androidx.core.content.edit
 
+/** Shared constants, logging helpers, and utility functions used across the SDK. */
 object Util {
     const val TAG : String = "Cognitive3D"
     const val SNAPSHOTINTERVAL : Float = 0.1f

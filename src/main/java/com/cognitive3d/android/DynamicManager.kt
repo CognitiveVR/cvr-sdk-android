@@ -6,6 +6,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.acos
 import kotlin.math.abs
 
+/**
+ * Manages the lifecycle and recording of dynamic objects (scene objects, controllers, hands).
+ * Tracks position, rotation, and scale changes using movement thresholds to minimize data volume.
+ */
 object DynamicManager {
 
     private var recordDynamicJob: Job? = null
@@ -16,6 +20,7 @@ object DynamicManager {
 
     internal val dynamics = CopyOnWriteArrayList<DynamicObject>()
 
+    /** Starts the dynamic object recording loop at the configured snapshot interval. */
     fun startDynamicRecording(
         scope: CoroutineScope,
         controller: ControllerTrackingProvider,
@@ -231,12 +236,14 @@ object DynamicManager {
         }
     }
 
+    /** Removes a dynamic object from tracking. Controllers/hands cannot be unregistered. */
     fun unregisterDynamicObject(dynamicObject: DynamicObject) {
         if (dynamicObject.isController) return // Hands should generally not be unregistered
         dynamicObjectProvider?.detachHitDetection(dynamicObject)
         dynamics.remove(dynamicObject)
     }
 
+    /** Stops the dynamic recording loop and releases the controller provider. */
     fun stopDynamicRecording() {
         isRecording = false
         recordDynamicJob?.cancel()
@@ -244,6 +251,7 @@ object DynamicManager {
         controllerProvider?.stop()
     }
 
+    /** Forces a final snapshot of all dynamics before a flush (e.g. on pause or session end). */
     suspend fun recordFinalDynamics() {
         try {
             processControllerDynamics(force = true)
@@ -255,6 +263,7 @@ object DynamicManager {
 
     // First 4 ids will be reserved for controllers and hands
     private var lastValidId : Int = 4
+    /** Returns a unique string ID for a new dynamic object (IDs 1-4 are reserved for controllers/hands). */
     fun getUniqueDynamicId() : String {
         lastValidId++
         while (dynamics.any { it.id == lastValidId.toString() }) {

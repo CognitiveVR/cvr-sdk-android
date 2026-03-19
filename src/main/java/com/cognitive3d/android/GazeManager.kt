@@ -2,6 +2,11 @@ package com.cognitive3d.android
 
 import kotlinx.coroutines.*
 
+/**
+ * Records head pose, gaze direction, and gaze hit results at a fixed interval.
+ * Runs a coroutine loop that samples the head tracking provider, tests gaze against
+ * dynamic objects, and serializes the results for upload.
+ */
 object GazeManager {
     private var recordGazeJob: Job? = null
     private var isRecording = false
@@ -9,6 +14,7 @@ object GazeManager {
     private var dynamicObjectProvider: DynamicObjectProvider? = null
     private val gazeMaxDistance: Float = 100f
 
+    /** Starts the gaze recording loop at the configured snapshot interval. */
     fun startGazeRecording(
         scope: CoroutineScope,
         provider: HeadTrackingProvider,
@@ -61,6 +67,7 @@ object GazeManager {
         }
     }
 
+    /** Stops the gaze recording loop and releases the tracking provider. */
     fun stopGazeRecording() {
         isRecording = false
         recordGazeJob?.cancel()
@@ -70,6 +77,7 @@ object GazeManager {
         dynamicObjectProvider = null
     }
 
+    /** Returns the current head pose, or a default identity pose if tracking is unavailable. */
     fun getHeadPose(): PoseData {
         return headTrackingProvider?.getHeadPose() ?: PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
     }
