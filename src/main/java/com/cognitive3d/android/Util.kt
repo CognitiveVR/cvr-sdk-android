@@ -32,23 +32,6 @@ object Util {
         return userId
     }
     
-    /**
-     * Computes the gaze point: position + forward * maxDistance.
-     *
-     * @return FloatArray of [gx, gy, gz]
-     */
-    fun computeGazePoint(
-        px: Float, py: Float, pz: Float,
-        fx: Float, fy: Float, fz: Float,
-        maxDistance: Float
-    ): FloatArray {
-        return floatArrayOf(
-            px + fx * maxDistance,
-            py + fy * maxDistance,
-            pz + fz * maxDistance
-        )
-    }
-
     fun logInfo(message: String) {
         if (enableLogging) {
             Log.i(TAG, message)

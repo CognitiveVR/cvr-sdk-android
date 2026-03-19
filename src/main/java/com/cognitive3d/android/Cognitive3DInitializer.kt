@@ -74,8 +74,12 @@ class Cognitive3DInitializer : ContentProvider() {
                 override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
                 override fun onActivityDestroyed(activity: Activity) {}
 
+                private fun getOrCreateProvider(activity: Activity): PlatformProvider {
+                    return platformProvider ?: PlatformFactory.create(activity).also { platformProvider = it }
+                }
+
                 private fun hasRequiredPermissions(context: Context): Boolean {
-                    val provider = platformProvider ?: PlatformFactory.create(context as Activity)
+                    val provider = getOrCreateProvider(context as Activity)
                     val permissions = provider.getRequiredPermissions()
                     val missing = permissions.filter {
                         ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
@@ -87,7 +91,7 @@ class Cognitive3DInitializer : ContentProvider() {
                 }
 
                 private fun requestRequiredPermissions(activity: Activity) {
-                    val provider = platformProvider ?: PlatformFactory.create(activity)
+                    val provider = getOrCreateProvider(activity)
                     ActivityCompat.requestPermissions(
                         activity,
                         provider.getRequiredPermissions(),

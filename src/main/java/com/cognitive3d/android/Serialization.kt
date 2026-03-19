@@ -268,7 +268,7 @@ object Serialization {
             appendFloat(gazePoint[2]).append(']')
         }
         if (objectId != null) {
-            append(",\"o\":\"").appendJsonString(objectId)
+            append(",\"o\":").appendJsonString(objectId)
         }
         append('}')
     }
