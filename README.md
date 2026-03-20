@@ -2,7 +2,9 @@
 
 Welcome! This SDK allows you to integrate your native Android projects with Cognitive3D, which provides analytics and insights about your project. In addition, Cognitive3D empowers you to take actions that will improve users' engagement with your experience.
 
-> **Note:** This SDK currently only supports Android XR native projects.
+**Supported Platforms:**
+- Android XR (Jetpack XR)
+- Meta Spatial SDK
 
 **Requirements:**
 - Android Studio Ladybug (2024.2.1) or later
@@ -23,15 +25,14 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 Add the Cognitive3D SDK to your project's `build.gradle` file:
 
+#### Android XR (Jetpack XR)
+
 <details>
 <summary>Kotlin DSL</summary>
 
 ```kotlin
 dependencies {
-    implementation("com.cognitive3d:android-sdk:1.0.0")
-
-    //Or get latest version
-    implementation("com.cognitive3d:android-sdk:+")
+    implementation("com.cognitive3d:android-xr-sdk:+")
 }
 ```
 
@@ -42,10 +43,31 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.cognitive3d:android-sdk:1.0.0'
+    implementation 'com.cognitive3d:android-xr-sdk:+'
+}
+```
 
-    //Or get latest version
-    implementation 'com.cognitive3d:android-sdk:+'
+</details>
+
+#### Meta Spatial SDK
+
+<details>
+<summary>Kotlin DSL</summary>
+
+```kotlin
+dependencies {
+    implementation("com.cognitive3d:meta-spatial-sdk:+")
+}
+```
+
+</details>
+
+<details>
+<summary>Groovy DSL</summary>
+
+```groovy
+dependencies {
+    implementation 'com.cognitive3d:meta-spatial-sdk:+'
 }
 ```
 

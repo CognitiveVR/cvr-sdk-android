@@ -40,6 +40,8 @@ class Cognitive3DInitializer : ContentProvider() {
                     if (!sessionInitialized) {
                         if (hasRequiredPermissions(activity)) {
                             initializePlatform(activity)
+                        } else {
+                            requestRequiredPermissions(activity)
                         }
                     } else {
                         Cognitive3DManager.resumeSession()
