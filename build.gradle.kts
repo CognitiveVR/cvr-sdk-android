@@ -1,7 +1,7 @@
 plugins {
     id("com.android.library") version "8.4.0"
     id("org.jetbrains.kotlin.android") version "2.1.0"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
     id("com.vanniktech.maven.publish") version "0.35.0"
 }
 
