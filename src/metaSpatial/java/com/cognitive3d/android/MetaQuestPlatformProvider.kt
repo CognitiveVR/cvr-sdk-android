@@ -6,11 +6,17 @@ import com.meta.spatial.runtime.VrActivity
 class MetaQuestPlatformProvider : PlatformProvider {
 
     private var sceneReference: com.meta.spatial.runtime.Scene? = null
+    private var headTrackingProvider: MetaQuestHeadTrackingProvider? = null
+    private var controllerTrackingProvider: MetaQuestControllerTrackingProvider? = null
+    private var dynamicObjectProvider: MetaQuestDynamicObjectProvider? = null
 
     override fun initialize(activity: Activity): Boolean {
         // Cast the activity to Meta's VrActivity to get the Scene
         if (activity is VrActivity) {
             sceneReference = activity.scene
+            headTrackingProvider = MetaQuestHeadTrackingProvider(activity.scene)
+            controllerTrackingProvider = MetaQuestControllerTrackingProvider(activity.scene)
+            dynamicObjectProvider = MetaQuestDynamicObjectProvider()
             return true
         }
         return false
@@ -21,17 +27,15 @@ class MetaQuestPlatformProvider : PlatformProvider {
     )
 
     override fun getHeadTrackingProvider(): HeadTrackingProvider {
-        val scene = sceneReference ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized with an AppSystemActivity before requesting tracking.")
-        return MetaQuestHeadTrackingProvider(scene)
+        return headTrackingProvider ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized before requesting tracking.")
     }
 
     override fun getControllerTrackingProvider(): ControllerTrackingProvider {
-        val scene = sceneReference ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized with an AppSystemActivity before requesting tracking.")
-        return MetaQuestControllerTrackingProvider(scene)
+        return controllerTrackingProvider ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized before requesting tracking.")
     }
 
     override fun getDynamicObjectProvider(): DynamicObjectProvider {
-        return MetaQuestDynamicObjectProvider()
+        return dynamicObjectProvider ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized before requesting tracking.")
     }
 
     override fun getXrPluginName(): String = "Meta Spatial SDK"

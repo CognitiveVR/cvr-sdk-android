@@ -11,6 +11,9 @@ import androidx.xr.runtime.SessionCreateSuccess
 class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvider {
 
     private var session: Session? = null
+    private var headTrackingProvider: AndroidXrHeadTrackingProvider? = null
+    private var controllerTrackingProvider: AndroidXrControllerTrackingProvider? = null
+    private var dynamicObjectProvider: AndroidXrDynamicObjectProvider? = null
 
     @SuppressLint("RestrictedApi")
     override fun initialize(activity: Activity): Boolean {
@@ -26,6 +29,9 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
                 )
                 val configResult = result.session.configure(newConfig)
                 if (configResult is SessionConfigureSuccess) {
+                    headTrackingProvider = AndroidXrHeadTrackingProvider(result.session)
+                    controllerTrackingProvider = AndroidXrControllerTrackingProvider(result.session)
+                    dynamicObjectProvider = AndroidXrDynamicObjectProvider(result.session)
                     true
                 } else {
                     Log.w(Util.TAG, "Failed to configure XR session: $configResult")
@@ -52,6 +58,7 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
     )
 
     override fun getHeadTrackingProvider(): HeadTrackingProvider {
+<<<<<<< Updated upstream
         val s = session ?: throw IllegalStateException("AndroidXrPlatformProvider must be initialized before requesting tracking.")
         return AndroidXrHeadTrackingProvider(s)
     }
@@ -64,6 +71,17 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
     override fun getDynamicObjectProvider(): DynamicObjectProvider {
         val s = session ?: throw IllegalStateException("AndroidXrPlatformProvider must be initialized before requesting tracking.")
         return AndroidXrDynamicObjectProvider(s)
+=======
+        return headTrackingProvider!!
+    }
+
+    override fun getControllerTrackingProvider(): ControllerTrackingProvider {
+        return controllerTrackingProvider!!
+    }
+
+    override fun getDynamicObjectProvider(): DynamicObjectProvider {
+        return dynamicObjectProvider!!
+>>>>>>> Stashed changes
     }
 
     override fun getXrPluginName(): String = "Jetpack XR SDK"
