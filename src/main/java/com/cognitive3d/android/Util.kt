@@ -2,17 +2,13 @@ package com.cognitive3d.android
 
 import android.content.Context
 import android.util.Log
-import androidx.xr.runtime.Session
-import androidx.xr.runtime.math.Pose
-import androidx.xr.runtime.math.Quaternion
-import androidx.xr.runtime.math.Vector3
-import androidx.xr.scenecore.scene
 import java.util.UUID
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.opengles.GL10
 import androidx.core.content.edit
 
+/** Shared constants, logging helpers, and utility functions used across the SDK. */
 object Util {
     const val TAG : String = "Cognitive3D"
     const val SNAPSHOTINTERVAL : Float = 0.1f
@@ -55,31 +51,35 @@ object Util {
     }
 
     /**
-     * Transforms a pose from perception space to activity space.
-     * Perception space is the raw tracking coordinate system, while activity space
-     * is relative to the user's environment and activity origin.
-     *
-     * @param session The current XR session
-     * @return The pose transformed into activity space
+     * Ray-AABB slab intersection test. Returns the distance along the ray to the closest
+     * hit point, or null if the ray misses the box or the box is behind the ray origin.
      */
-    fun Pose.toActivitySpace(session: Session): Pose {
-        return session.scene.perceptionSpace.transformPoseTo(
-            this,
-            session.scene.activitySpace
-        )
-    }
+    internal fun rayAABBIntersect(
+        ox: Float, oy: Float, oz: Float,
+        dx: Float, dy: Float, dz: Float,
+        minX: Float, minY: Float, minZ: Float,
+        maxX: Float, maxY: Float, maxZ: Float
+    ): Float? {
+        var tMin = Float.NEGATIVE_INFINITY
+        var tMax = Float.POSITIVE_INFINITY
 
-    /**
-     * Converts a pose from a right-handed coordinate system to a left-handed one.
-     * This negates the Z position and adjusts the quaternion rotation accordingly.
-     *
-     * @return The pose converted to left-handed coordinates
-     */
-    fun Pose.toLeftHanded(): Pose {
-        return Pose(
-            Vector3(translation.x, translation.y, -translation.z),
-            Quaternion(-rotation.x, -rotation.y, rotation.z, rotation.w)
-        )
+        if (kotlin.math.abs(dx) > 1e-6f) {
+            val t1 = (minX - ox) / dx;  val t2 = (maxX - ox) / dx
+            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
+        } else if (ox < minX || ox > maxX) return null
+
+        if (kotlin.math.abs(dy) > 1e-6f) {
+            val t1 = (minY - oy) / dy;  val t2 = (maxY - oy) / dy
+            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
+        } else if (oy < minY || oy > maxY) return null
+
+        if (kotlin.math.abs(dz) > 1e-6f) {
+            val t1 = (minZ - oz) / dz;  val t2 = (maxZ - oz) / dz
+            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
+        } else if (oz < minZ || oz > maxZ) return null
+
+        if (tMin > tMax || tMax < 0f) return null
+        return if (tMin >= 0f) tMin else tMax
     }
 
     /**

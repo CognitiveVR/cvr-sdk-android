@@ -1,0 +1,24 @@
+package com.cognitive3d.android
+
+data class PoseData(
+    val px: Float, val py: Float, val pz: Float,      // position
+    val rx: Float, val ry: Float, val rz: Float, val rw: Float  // rotation quaternion
+)
+
+data class ScaleData(
+    val sx: Float, val sy: Float, val sz: Float
+)
+
+/** Ray origin (position) + forward direction for gaze raycasting. */
+data class GazeRayData(
+    val px: Float, val py: Float, val pz: Float,
+    val fx: Float, val fy: Float, val fz: Float
+)
+
+/** Result of a gaze ray hitting a dynamic object. */
+data class GazeHitResult(
+    val objectId: String,
+    val distance: Float,
+    val hitX: Float, val hitY: Float, val hitZ: Float,           // world space (for debug visuals)
+    val localHitX: Float, val localHitY: Float, val localHitZ: Float  // object-local space
+)

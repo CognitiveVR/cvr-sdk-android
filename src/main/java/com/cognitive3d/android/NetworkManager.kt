@@ -8,6 +8,10 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
+/**
+ * Handles sending serialized data to the Cognitive3D backend.
+ * Includes retry logic with exponential backoff and local file caching for offline resilience.
+ */
 object NetworkManager {
     private var cache: DualFileCache? = null
     private var isProcessingCache = false
@@ -22,6 +26,7 @@ object NetworkManager {
 
     private val networkScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** Initializes the network layer with API key, cache storage, and retry settings. */
     fun init(context: Context, config: Cognitive3DConfig) {
         // Ensure the API key starts with the required prefix
         val rawKey = config.apiKey
@@ -41,6 +46,7 @@ object NetworkManager {
         }
     }
 
+    /** Sends JSON content to the given URL, falling back to local cache on failure. */
     suspend fun send(url: String, content: String) {
         if (lastRequestFailed) {
             val currentTime = System.currentTimeMillis()

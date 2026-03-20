@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library") version "8.4.0"
-    id("org.jetbrains.kotlin.android") version "1.9.23"
+    id("org.jetbrains.kotlin.android") version "2.1.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
     id("com.vanniktech.maven.publish") version "0.35.0"
 }
 
@@ -17,17 +18,25 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.11"
+    flavorDimensions += "platform"
+    productFlavors {
+        create("androidXr") {
+            dimension = "platform"
+        }
+        create("metaSpatial") {
+            dimension = "platform"
+        }
     }
 
-    flavorDimensions += "xrVersion"
-    productFlavors {
-        create("xrAlpha09") {
-            dimension = "xrVersion"
+    sourceSets {
+        getByName("main") {
+            java.srcDirs("src/main/java")
         }
-        create("xrAlpha10") {
-            dimension = "xrVersion"
+        getByName("androidXr") {
+            java.srcDirs("src/androidXr/java")
+        }
+        getByName("metaSpatial") {
+            java.srcDirs("src/metaSpatial/java")
         }
     }
 
@@ -55,23 +64,23 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.runtime:runtime")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.8.2")
 
-    // XR Alpha 09 specific
-    "xrAlpha09Implementation"("androidx.xr.compose:compose:1.0.0-alpha09")
-    "xrAlpha09Implementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha09")
-    "xrAlpha09Implementation"("androidx.xr.runtime:runtime:1.0.0-alpha09")
-    "xrAlpha09Implementation"("androidx.xr.arcore:arcore:1.0.0-alpha09")
+    // Jetpack XR dependencies (androidXr flavor only)
+    "androidXrImplementation"("androidx.xr.compose:compose:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
 
-    // XR Alpha 10 specific
-    "xrAlpha10Implementation"("androidx.xr.compose:compose:1.0.0-alpha10")
-    "xrAlpha10Implementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
-    "xrAlpha10Implementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
-    "xrAlpha10Implementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
+    // Meta Spatial SDK dependencies (metaSpatial flavor only)
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.10.1")
 }
 
 // Helper function to get properties with defaults
@@ -79,16 +88,23 @@ fun getProperty(key: String, default: String = ""): String {
     return providers.gradleProperty(key).getOrElse(default)
 }
 
+// Determine which flavor to publish (pass -PFLAVOR=androidXr or -PFLAVOR=metaSpatial)
+val flavorToBuild = providers.gradleProperty("FLAVOR").getOrElse("androidXr")
+
 mavenPublishing {
+    val artifactId = when (flavorToBuild) {
+        "metaSpatial" -> "meta-spatial-sdk"
+        else -> "android-xr-sdk"
+    }
+
     coordinates(
         getProperty("GROUP"),
-        getProperty("POM_ARTIFACT_ID"),
+        artifactId,
         getProperty("VERSION_NAME")
     )
 
-    // Publishing the xrAlpha09 variant to Maven Central as the primary SDK
     configure(com.vanniktech.maven.publish.AndroidSingleVariantLibrary(
-        variant = "xrAlpha09Release",
+        variant = "${flavorToBuild}Release",
         sourcesJar = true,
         publishJavadocJar = true
     ))

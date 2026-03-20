@@ -1,13 +1,16 @@
 package com.cognitive3d.android
 
 import android.content.Context
-import androidx.xr.runtime.math.Pose
-import com.cognitive3d.android.Util.toLeftHanded
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Serializes gaze, dynamic object, event, sensor, and boundary data into JSON payloads.
+ * Buffers data in StringBuilders and flushes to the network when thresholds are reached
+ * or on a timed interval.
+ */
 object Serialization {
     private var gatewayURL: String = "https://data.cognitive3d.com"
     private var eventURL: String = ""
@@ -43,7 +46,7 @@ object Serialization {
     
     private val allSessionProperties = ConcurrentHashMap<String, Any>()
     private val dirtySessionProperties = ConcurrentHashMap<String, Any>()
-    private val pendingCustomEvents = mutableListOf<Triple<String?, Map<String, Any?>, Pose?>>()
+    private val pendingCustomEvents = mutableListOf<Triple<String?, Map<String, Any?>, PoseData?>>()
     
     private data class DynamicManifestEntry(
         val id: String,
@@ -131,7 +134,7 @@ object Serialization {
                     
                     val payloads = eventMutex.withLock {
                         eventsToProcess.mapNotNull { (category, properties, storedPose) ->
-                            val finalPose = storedPose?.toLeftHanded() ?: GazeManager.getHeadPose()
+                            val finalPose = storedPose ?: GazeManager.getHeadPose()
                             serializeCustomEventsInternal(category, properties, finalPose)
                         }
                     }
@@ -221,12 +224,12 @@ object Serialization {
     /**
      * Records a single gaze snapshot, typically representing the user's head pose.
      */
-    suspend fun recordGaze(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, timestamp: Double) {
+    suspend fun recordGaze(px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, gazePoint: FloatArray? = null, timestamp: Double, objectId: String? = null) {
         if (!isInitialized) return
-        
+
         val payload = gazeMutex.withLock {
             if (gazeCount > 0) gazeBuilder.append(',')
-            gazeBuilder.appendGazePoint(timestamp, px, py, pz, rx, ry, rz, rw)
+            gazeBuilder.appendGazePoint(timestamp, px, py, pz, rx, ry, rz, rw, gazePoint, objectId)
             gazeCount++
 
             if (gazeCount >= GAZE_THRESHOLD) {
@@ -247,7 +250,7 @@ object Serialization {
         return gazeBuilder.toString()
     }
 
-    private fun StringBuilder.appendGazePoint(time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float) {
+    private fun StringBuilder.appendGazePoint(time: Double, px: Float, py: Float, pz: Float, rx: Float, ry: Float, rz: Float, rw: Float, gazePoint: FloatArray? = null, objectId: String? = null) {
         append("{\"time\":").append(time)
         append(",\"p\":[")
         appendFloat(px).append(',')
@@ -258,7 +261,43 @@ object Serialization {
         appendFloat(ry).append(',')
         appendFloat(rz).append(',')
         appendFloat(rw).append(']')
+        if (gazePoint != null && gazePoint.size == 3) {
+            append(",\"g\":[")
+            appendFloat(gazePoint[0]).append(',')
+            appendFloat(gazePoint[1]).append(',')
+            appendFloat(gazePoint[2]).append(']')
+        }
+        if (objectId != null) {
+            append(",\"o\":").appendJsonString(objectId)
+        }
         append('}')
+    }
+
+    internal fun StringBuilder.appendJsonString(value: String): StringBuilder {
+        append('"')
+        for (ch in value) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '\"' -> append("\\\"")
+                '\b' -> append("\\b")
+                '\u000C' -> append("\\f")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> {
+                    if (ch < ' ') {
+                        append("\\u")
+                        val code = ch.code
+                        val hex = code.toString(16).padStart(4, '0')
+                        append(hex)
+                    } else {
+                        append(ch)
+                    }
+                }
+            }
+        }
+        append('"')
+        return this
     }
 
     private fun StringBuilder.appendFloat(value: Float): StringBuilder {
@@ -396,7 +435,7 @@ object Serialization {
         return eventBuilder.toString()
     }
 
-    suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: Pose? = null) {
+    suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: PoseData? = null) {
         if (!isInitialized) {
             initializationMutex.withLock {
                 if (!isInitialized) {
@@ -406,24 +445,24 @@ object Serialization {
             }
         }
 
-        val finalPose = pose?.toLeftHanded() ?: GazeManager.getHeadPose()
+        val finalPose = pose ?: GazeManager.getHeadPose()
         val payload = eventMutex.withLock {
             serializeCustomEventsInternal(category, properties, finalPose)
         }
         payload?.let { NetworkManager.send(eventURL, it) }
     }
 
-    private fun serializeCustomEventsInternal(category: String?, properties: Map<String, Any?>, pose: Pose?): String? {
+    private fun serializeCustomEventsInternal(category: String?, properties: Map<String, Any?>, pose: PoseData?): String? {
         if (eventCount > 0) eventBuilder.append(',')
-        
+
         eventBuilder.apply {
             append('{')
             appendKeyValue("name", category)
             appendKeyValue("time", System.currentTimeMillis().toDouble() / 1000.0)
             append("\"point\":[")
-            appendFloat(pose?.translation?.x ?: 0f).append(',')
-            appendFloat(pose?.translation?.y ?: 0f).append(',')
-            appendFloat(pose?.translation?.z ?: 0f).append(']')
+            appendFloat(pose?.px ?: 0f).append(',')
+            appendFloat(pose?.py ?: 0f).append(',')
+            appendFloat(pose?.pz ?: 0f).append(']')
 
             if (properties.isNotEmpty()) {
                 append(",\"properties\":{")

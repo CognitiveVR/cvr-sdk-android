@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONObject
 
+/** SDK configuration loaded from the cognitive3d.json asset file. */
 data class Cognitive3DConfig(
     val apiKey: String,
     val gatewayUrl: String = "https://data.cognitive3d.com",
@@ -27,6 +28,7 @@ data class Cognitive3DConfig(
     )
 
     companion object {
+        /** Parses cognitive3d.json from the app's assets directory. Returns null on failure. */
         fun fromAssets(context: Context): Cognitive3DConfig? {
             return try {
                 val jsonString = context.assets.open("cognitive3d.json").bufferedReader().use { it.readText() }
