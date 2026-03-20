@@ -24,7 +24,6 @@ class Cognitive3DInitializer : ContentProvider() {
         if (context != null && context.applicationContext is Application) {
             val application = context.applicationContext as Application
             application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-                private var startedActivityCount = 0
                 private var isChangingConfiguration = false
                 private var sessionInitialized = false
                 private var platformProvider: PlatformProvider? = null
@@ -32,7 +31,6 @@ class Cognitive3DInitializer : ContentProvider() {
                 override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
 
                 override fun onActivityStarted(activity: Activity) {
-                    startedActivityCount++
                     if (isChangingConfiguration) {
                         isChangingConfiguration = false
                     }
@@ -55,7 +53,6 @@ class Cognitive3DInitializer : ContentProvider() {
                 }
 
                 override fun onActivityStopped(activity: Activity) {
-                    startedActivityCount--
                     isChangingConfiguration = activity.isChangingConfigurations
                 }
 
