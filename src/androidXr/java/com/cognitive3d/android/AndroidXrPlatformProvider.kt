@@ -58,20 +58,6 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
     )
 
     override fun getHeadTrackingProvider(): HeadTrackingProvider {
-<<<<<<< Updated upstream
-        val s = session ?: throw IllegalStateException("AndroidXrPlatformProvider must be initialized before requesting tracking.")
-        return AndroidXrHeadTrackingProvider(s)
-    }
-
-    override fun getControllerTrackingProvider(): ControllerTrackingProvider {
-        val s = session ?: throw IllegalStateException("AndroidXrPlatformProvider must be initialized before requesting tracking.")
-        return AndroidXrControllerTrackingProvider(s)
-    }
-
-    override fun getDynamicObjectProvider(): DynamicObjectProvider {
-        val s = session ?: throw IllegalStateException("AndroidXrPlatformProvider must be initialized before requesting tracking.")
-        return AndroidXrDynamicObjectProvider(s)
-=======
         return headTrackingProvider!!
     }
 
@@ -81,7 +67,6 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
 
     override fun getDynamicObjectProvider(): DynamicObjectProvider {
         return dynamicObjectProvider!!
->>>>>>> Stashed changes
     }
 
     override fun getXrPluginName(): String = "Jetpack XR SDK"
