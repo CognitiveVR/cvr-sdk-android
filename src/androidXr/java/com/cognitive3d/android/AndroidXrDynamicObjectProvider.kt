@@ -16,10 +16,14 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
 
     override fun getStateFromTrackable(trackable: Any): DynamicTrackableState? {
         if (trackable is Entity) {
-            val pose = trackable.activitySpacePose.toPoseDataFromActivity()
-            val scale = trackable.getScale().toScaleData()
-            val enabled = trackable.isEnabled()
-            return DynamicTrackableState(pose, scale, enabled)
+            return try {
+                val pose = trackable.activitySpacePose.toPoseDataFromActivity()
+                val scale = trackable.getScale().toScaleData()
+                val enabled = trackable.isEnabled()
+                DynamicTrackableState(pose, scale, enabled)
+            } catch (e: IllegalStateException) {
+                null
+            }
         }
         return null
     }
@@ -71,7 +75,7 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
             val entity = obj.trackableRef as? Entity ?: continue
 
             // Get entity's world pose (right-handed activity space)
-            val worldPose = entity.activitySpacePose
+            val worldPose = try { entity.activitySpacePose } catch (e: IllegalStateException) { continue }
             val invPose = worldPose.inverse()
 
             // Transform ray into entity local space
