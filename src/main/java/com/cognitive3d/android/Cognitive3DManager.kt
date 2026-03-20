@@ -115,6 +115,7 @@ object Cognitive3DManager {
         stopFlushTimer()
 
         scope.launch {
+            Serialization.serializeCustomEvents("c3d.pause", mapOf("ispaused" to true))
             // Record current state of dynamic objects before flushing
             DynamicManager.recordFinalDynamics()
             // Flush all pending data buffers immediately
@@ -140,6 +141,10 @@ object Cognitive3DManager {
         PerformanceMonitor.startMonitoring(scope)
         startSensorProcessor()
         startFlushTimer()
+
+        scope.launch {
+            Serialization.serializeCustomEvents("c3d.pause", mapOf("ispaused" to false))
+        }
     }
 
     @JvmStatic

@@ -33,13 +33,7 @@ class Cognitive3DInitializer : ContentProvider() {
 
                 override fun onActivityStarted(activity: Activity) {
                     startedActivityCount++
-                    if (startedActivityCount == 1 && !isChangingConfiguration) {
-                        if (hasRequiredPermissions(activity)) {
-                            initializePlatform(activity)
-                        } else {
-                            requestRequiredPermissions(activity)
-                        }
-                    } else if (isChangingConfiguration) {
+                    if (isChangingConfiguration) {
                         isChangingConfiguration = false
                     }
                 }
@@ -63,16 +57,18 @@ class Cognitive3DInitializer : ContentProvider() {
                 override fun onActivityStopped(activity: Activity) {
                     startedActivityCount--
                     isChangingConfiguration = activity.isChangingConfigurations
-                    if (startedActivityCount == 0 && !isChangingConfiguration) {
+                }
+
+                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+
+                override fun onActivityDestroyed(activity: Activity) {
+                    if (!activity.isChangingConfigurations) {
                         Cognitive3DManager.endSession()
                         platformProvider?.destroy()
                         sessionInitialized = false
                         platformProvider = null
                     }
                 }
-
-                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-                override fun onActivityDestroyed(activity: Activity) {}
 
                 private fun getOrCreateProvider(activity: Activity): PlatformProvider {
                     return platformProvider ?: PlatformFactory.create(activity).also { platformProvider = it }
