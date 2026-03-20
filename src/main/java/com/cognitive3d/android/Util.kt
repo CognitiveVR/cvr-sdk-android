@@ -51,6 +51,38 @@ object Util {
     }
 
     /**
+     * Ray-AABB slab intersection test. Returns the distance along the ray to the closest
+     * hit point, or null if the ray misses the box or the box is behind the ray origin.
+     */
+    internal fun rayAABBIntersect(
+        ox: Float, oy: Float, oz: Float,
+        dx: Float, dy: Float, dz: Float,
+        minX: Float, minY: Float, minZ: Float,
+        maxX: Float, maxY: Float, maxZ: Float
+    ): Float? {
+        var tMin = Float.NEGATIVE_INFINITY
+        var tMax = Float.POSITIVE_INFINITY
+
+        if (kotlin.math.abs(dx) > 1e-6f) {
+            val t1 = (minX - ox) / dx;  val t2 = (maxX - ox) / dx
+            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
+        } else if (ox < minX || ox > maxX) return null
+
+        if (kotlin.math.abs(dy) > 1e-6f) {
+            val t1 = (minY - oy) / dy;  val t2 = (maxY - oy) / dy
+            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
+        } else if (oy < minY || oy > maxY) return null
+
+        if (kotlin.math.abs(dz) > 1e-6f) {
+            val t1 = (minZ - oz) / dz;  val t2 = (maxZ - oz) / dz
+            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
+        } else if (oz < minZ || oz > maxZ) return null
+
+        if (tMin > tMax || tMax < 0f) return null
+        return if (tMin >= 0f) tMin else tMax
+    }
+
+    /**
      * Helper to get GPU info by creating a temporary off-screen EGL context.
      * Safe to call from background threads.
      */

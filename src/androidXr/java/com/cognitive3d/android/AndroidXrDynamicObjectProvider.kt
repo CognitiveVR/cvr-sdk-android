@@ -87,7 +87,7 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
             val sMaxY = bbox.maxY * scale
             val sMaxZ = bbox.maxZ * scale
 
-            val dist = rayAABBIntersect(
+            val dist = Util.rayAABBIntersect(
                 localOrigin.x, localOrigin.y, localOrigin.z,
                 localDir.x, localDir.y, localDir.z,
                 sMinX, sMinY, sMinZ,
@@ -121,32 +121,4 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
         return closestHit
     }
 
-    private fun rayAABBIntersect(
-        ox: Float, oy: Float, oz: Float,
-        dx: Float, dy: Float, dz: Float,
-        minX: Float, minY: Float, minZ: Float,
-        maxX: Float, maxY: Float, maxZ: Float
-    ): Float? {
-        var tMin = Float.NEGATIVE_INFINITY
-        var tMax = Float.POSITIVE_INFINITY
-
-        val axes = floatArrayOf(dx, dy, dz)
-        val origins = floatArrayOf(ox, oy, oz)
-        val mins = floatArrayOf(minX, minY, minZ)
-        val maxs = floatArrayOf(maxX, maxY, maxZ)
-
-        for (i in 0..2) {
-            if (axes[i] != 0f) {
-                val t1 = (mins[i] - origins[i]) / axes[i]
-                val t2 = (maxs[i] - origins[i]) / axes[i]
-                tMin = maxOf(tMin, minOf(t1, t2))
-                tMax = minOf(tMax, maxOf(t1, t2))
-            } else {
-                if (origins[i] < mins[i] || origins[i] > maxs[i]) return null
-            }
-        }
-
-        if (tMin > tMax || tMax < 0f) return null
-        return if (tMin >= 0f) tMin else tMax
-    }
 }

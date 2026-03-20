@@ -8,7 +8,6 @@ import com.meta.spatial.toolkit.Scale
 import com.meta.spatial.toolkit.Transform
 import com.meta.spatial.toolkit.Visible
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
@@ -106,7 +105,7 @@ class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
             val sdX = ldX * isx;  val sdY = ldY * isy;  val sdZ = ldZ * isz
 
             // Intersect with raw (unscaled) bbox — only accept front-face hits (tMin >= 0)
-            val tScaled = rayAABBIntersect(
+            val tScaled = Util.rayAABBIntersect(
                 soX, soY, soZ,
                 sdX, sdY, sdZ,
                 bbox.minX, bbox.minY, bbox.minZ,
@@ -136,37 +135,6 @@ class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
         }
 
         return closestHit
-    }
-
-    // Ray-AABB slab intersection. Returns tMin only if tMin >= 0 (front-face hit only).
-    // Returning t=0 when inside box causes hits to appear at ray origin — so we reject tMin < 0.
-    private fun rayAABBIntersect(
-        ox: Float, oy: Float, oz: Float,
-        dx: Float, dy: Float, dz: Float,
-        minX: Float, minY: Float, minZ: Float,
-        maxX: Float, maxY: Float, maxZ: Float
-    ): Float? {
-        var tMin = Float.NEGATIVE_INFINITY
-        var tMax = Float.POSITIVE_INFINITY
-
-        if (abs(dx) > 1e-6f) {
-            val t1 = (minX - ox) / dx;  val t2 = (maxX - ox) / dx
-            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
-        } else if (ox !in minX..maxX) return null
-
-        if (abs(dy) > 1e-6f) {
-            val t1 = (minY - oy) / dy;  val t2 = (maxY - oy) / dy
-            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
-        } else if (oy !in minY..maxY) return null
-
-        if (abs(dz) > 1e-6f) {
-            val t1 = (minZ - oz) / dz;  val t2 = (maxZ - oz) / dz
-            tMin = maxOf(tMin, minOf(t1, t2));  tMax = minOf(tMax, maxOf(t1, t2))
-        } else if (oz !in minZ..maxZ) return null
-
-        // Reject: no intersection, behind ray
-        if (tMin > tMax || tMax < 0f) return null
-        return if (tMin >= 0f) tMin else tMax
     }
 
 }
