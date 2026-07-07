@@ -1,11 +1,12 @@
 package com.cognitive3d.android
 
 import android.app.Activity
+import android.content.Context
 import com.meta.spatial.runtime.VrActivity
 
 class MetaQuestPlatformProvider : PlatformProvider {
 
-    private var sceneReference: com.meta.spatial.runtime.Scene? = null
+    private var appContext: Context? = null
     private var headTrackingProvider: MetaQuestHeadTrackingProvider? = null
     private var controllerTrackingProvider: MetaQuestControllerTrackingProvider? = null
     private var dynamicObjectProvider: MetaQuestDynamicObjectProvider? = null
@@ -13,7 +14,7 @@ class MetaQuestPlatformProvider : PlatformProvider {
     override fun initialize(activity: Activity): Boolean {
         // Cast the activity to Meta's VrActivity to get the Scene
         if (activity is VrActivity) {
-            sceneReference = activity.scene
+            appContext = activity.applicationContext
             headTrackingProvider = MetaQuestHeadTrackingProvider(activity.scene)
             controllerTrackingProvider = MetaQuestControllerTrackingProvider(activity.scene)
             dynamicObjectProvider = MetaQuestDynamicObjectProvider()
@@ -38,7 +39,14 @@ class MetaQuestPlatformProvider : PlatformProvider {
         return dynamicObjectProvider ?: throw IllegalStateException("MetaQuestPlatformProvider must be initialized before requesting tracking.")
     }
 
-    override fun getXrPluginName(): String = "Meta Spatial SDK"
+    // "oculus.software.*" are the feature strings Meta documents for manifest
+    // <uses-feature> declarations; devices declare them as system features
+    // (eye tracking: Quest Pro only, hand tracking: all current Quests).
+    override fun isEyeTrackingAvailable(): Boolean =
+        appContext?.packageManager?.hasSystemFeature("oculus.software.eye_tracking") ?: false
+
+    override fun isHandTrackingAvailable(): Boolean =
+        appContext?.packageManager?.hasSystemFeature("oculus.software.handtracking") ?: false
 
     override fun destroy() {
 
