@@ -8,12 +8,15 @@ import androidx.xr.runtime.DeviceTrackingMode
 import androidx.xr.runtime.EyeTrackingMode
 import androidx.xr.runtime.HandTrackingMode
 import androidx.xr.runtime.Session
+import androidx.xr.runtime.SessionConfigureResult
 import androidx.xr.runtime.SessionConfigureSuccess
 import androidx.xr.runtime.SessionCreateSuccess
 
 class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvider {
 
     private var session: Session? = null
+    private var eyeTrackingAvailable = false
+    private var handTrackingAvailable = false
     private var headTrackingProvider: AndroidXrHeadTrackingProvider? = null
     private var controllerTrackingProvider: AndroidXrControllerTrackingProvider? = null
     private var dynamicObjectProvider: AndroidXrDynamicObjectProvider? = null
@@ -24,13 +27,7 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
             val result = Session.create(activity)
             if (result is SessionCreateSuccess) {
                 session = result.session
-                val newConfig = Config.Builder(result.session.config)
-                    // SPATIAL is the renamed successor of alpha10's LAST_KNOWN mode
-                    .setDeviceTracking(DeviceTrackingMode.SPATIAL)
-                    .setHandTracking(HandTrackingMode.BOTH)
-                    .setEyeTracking(EyeTrackingMode.FINE_TRACKING)
-                    .build()
-                val configResult = result.session.configure(newConfig)
+                val configResult = configureSession(result.session)
                 if (configResult is SessionConfigureSuccess) {
                     headTrackingProvider = AndroidXrHeadTrackingProvider(result.session)
                     controllerTrackingProvider = AndroidXrControllerTrackingProvider(result.session)
@@ -53,6 +50,50 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
         }
     }
 
+    /**
+     * Configures the session with progressively reduced configs: full tracking,
+     * then without eye tracking, then without eye and hand tracking. configure()
+     * throws UnsupportedOperationException for unsupported modes (as of alpha07
+     * there is no not-supported result type), so without the fallbacks the whole
+     * session would fail to start on devices lacking eye or hand tracking.
+     */
+    private fun configureSession(session: Session): SessionConfigureResult? {
+        val candidateModes = listOf(
+            EyeTrackingMode.FINE_TRACKING to HandTrackingMode.BOTH,
+            EyeTrackingMode.DISABLED to HandTrackingMode.BOTH,
+            EyeTrackingMode.DISABLED to HandTrackingMode.DISABLED
+        )
+        for ((eyeMode, handMode) in candidateModes) {
+            val candidate = Config.Builder(session.config)
+                // SPATIAL is the renamed successor of alpha10's LAST_KNOWN mode
+                .setDeviceTracking(DeviceTrackingMode.SPATIAL)
+                .setHandTracking(handMode)
+                .setEyeTracking(eyeMode)
+                .build()
+            val result = tryConfigure(session, candidate, eyeMode, handMode)
+            if (result is SessionConfigureSuccess) {
+                eyeTrackingAvailable = eyeMode == EyeTrackingMode.FINE_TRACKING
+                handTrackingAvailable = handMode == HandTrackingMode.BOTH
+                return result
+            }
+        }
+        Log.w(Util.TAG, "No supported XR session configuration found on this device")
+        return null
+    }
+
+    private fun tryConfigure(
+        session: Session,
+        config: Config,
+        eyeMode: EyeTrackingMode,
+        handMode: HandTrackingMode
+    ): SessionConfigureResult? =
+        try {
+            session.configure(config)
+        } catch (e: UnsupportedOperationException) {
+            Log.w(Util.TAG, "XR config not supported (eye=$eyeMode, hand=$handMode)")
+            null
+        }
+
     override fun getRequiredPermissions(): Array<String> = arrayOf(
         "android.permission.HEAD_TRACKING",
         "android.permission.HAND_TRACKING",
@@ -72,7 +113,9 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
         return dynamicObjectProvider!!
     }
 
-    override fun getXrPluginName(): String = "Jetpack XR SDK"
+    override fun isEyeTrackingAvailable(): Boolean = eyeTrackingAvailable
+
+    override fun isHandTrackingAvailable(): Boolean = handTrackingAvailable
 
     override fun destroy() {
         session = null
