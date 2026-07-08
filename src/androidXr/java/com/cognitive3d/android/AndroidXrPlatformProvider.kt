@@ -52,31 +52,34 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
 
     /**
      * Configures the session with progressively reduced configs covering every
-     * eye/hand support combination, so the accepted tier is an accurate
-     * capability readback. configure() throws UnsupportedOperationException for
-     * unsupported modes (as of alpha07 there is no not-supported result type),
-     * so without the fallbacks the whole session would fail to start on devices
-     * lacking eye or hand tracking.
+     * eye/hand mode combination, so the accepted tier is an accurate capability
+     * readback. Every eye mode (fine -> coarse -> disabled) is tried before
+     * dropping hand tracking: the two eye permissions can be granted or denied
+     * independently, and tryConfigure treats both permission denial and hardware
+     * unsupport as a tier failure, so the accepted tier reflects what is actually
+     * usable — not an all-or-nothing default.
      */
     private fun configureSession(session: Session): SessionConfigureResult? {
-        val candidateModes = listOf(
-            EyeTrackingMode.FINE_TRACKING to HandTrackingMode.BOTH,
-            EyeTrackingMode.DISABLED to HandTrackingMode.BOTH,
-            EyeTrackingMode.FINE_TRACKING to HandTrackingMode.DISABLED,
-            EyeTrackingMode.DISABLED to HandTrackingMode.DISABLED
+        val eyeModes = listOf(
+            EyeTrackingMode.FINE_TRACKING,
+            EyeTrackingMode.COARSE_TRACKING,
+            EyeTrackingMode.DISABLED
         )
-        for ((eyeMode, handMode) in candidateModes) {
-            val candidate = Config.Builder(session.config)
-                // SPATIAL is the renamed successor of alpha10's LAST_KNOWN mode
-                .setDeviceTracking(DeviceTrackingMode.SPATIAL)
-                .setHandTracking(handMode)
-                .setEyeTracking(eyeMode)
-                .build()
-            val result = tryConfigure(session, candidate, eyeMode, handMode)
-            if (result is SessionConfigureSuccess) {
-                eyeTrackingAvailable = eyeMode == EyeTrackingMode.FINE_TRACKING
-                handTrackingAvailable = handMode == HandTrackingMode.BOTH
-                return result
+        val handModes = listOf(HandTrackingMode.BOTH, HandTrackingMode.DISABLED)
+        for (handMode in handModes) {
+            for (eyeMode in eyeModes) {
+                val candidate = Config.Builder(session.config)
+                    // SPATIAL is the renamed successor of alpha10's LAST_KNOWN mode
+                    .setDeviceTracking(DeviceTrackingMode.SPATIAL)
+                    .setHandTracking(handMode)
+                    .setEyeTracking(eyeMode)
+                    .build()
+                val result = tryConfigure(session, candidate, eyeMode, handMode)
+                if (result is SessionConfigureSuccess) {
+                    eyeTrackingAvailable = eyeMode != EyeTrackingMode.DISABLED
+                    handTrackingAvailable = handMode == HandTrackingMode.BOTH
+                    return result
+                }
             }
         }
         Log.w(Util.TAG, "No supported XR session configuration found on this device")
