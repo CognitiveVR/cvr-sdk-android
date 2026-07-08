@@ -49,11 +49,12 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
 
     /**
      * Configures the session with progressively reduced configs covering every
-     * eye/hand support combination, so the accepted tier is an accurate
-     * capability readback. configure() throws UnsupportedOperationException for
-     * unsupported modes (as of alpha07 there is no not-supported result type),
-     * so without the fallbacks the whole session would fail to start on devices
-     * lacking eye or hand tracking.
+     * eye/hand mode combination, so the accepted tier is an accurate capability
+     * readback. Every eye mode (fine -> coarse -> disabled) is tried before
+     * dropping hand tracking: the two eye permissions can be granted or denied
+     * independently, and tryConfigure treats both permission denial and hardware
+     * unsupport as a tier failure, so the accepted tier reflects what is actually
+     * usable — not an all-or-nothing default.
      */
     private fun configureSession(session: Session): SessionConfigureResult? {
         val desiredConfig = session.config.copy(
@@ -62,21 +63,21 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
             handTracking = Config.HandTrackingMode.BOTH,
             eyeTracking = Config.EyeTrackingMode.FINE_TRACKING
         )
-        val candidateConfigs = listOf(
-            desiredConfig,
-            desiredConfig.copy(eyeTracking = Config.EyeTrackingMode.DISABLED),
-            desiredConfig.copy(handTracking = Config.HandTrackingMode.DISABLED),
-            desiredConfig.copy(
-                eyeTracking = Config.EyeTrackingMode.DISABLED,
-                handTracking = Config.HandTrackingMode.DISABLED
-            )
+        val eyeModes = listOf(
+            Config.EyeTrackingMode.FINE_TRACKING,
+            Config.EyeTrackingMode.COARSE_TRACKING,
+            Config.EyeTrackingMode.DISABLED
         )
-        for (candidate in candidateConfigs) {
-            val result = tryConfigure(session, candidate)
-            if (result is SessionConfigureSuccess) {
-                eyeTrackingAvailable = candidate.eyeTracking == Config.EyeTrackingMode.FINE_TRACKING
-                handTrackingAvailable = candidate.handTracking == Config.HandTrackingMode.BOTH
-                return result
+        val handModes = listOf(Config.HandTrackingMode.BOTH, Config.HandTrackingMode.DISABLED)
+        for (handMode in handModes) {
+            for (eyeMode in eyeModes) {
+                val candidate = desiredConfig.copy(eyeTracking = eyeMode, handTracking = handMode)
+                val result = tryConfigure(session, candidate)
+                if (result is SessionConfigureSuccess) {
+                    eyeTrackingAvailable = eyeMode != Config.EyeTrackingMode.DISABLED
+                    handTrackingAvailable = handMode == Config.HandTrackingMode.BOTH
+                    return result
+                }
             }
         }
         Log.w(Util.TAG, "No supported XR session configuration found on this device")
