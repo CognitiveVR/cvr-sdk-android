@@ -9,8 +9,10 @@ import android.app.Activity
 interface PlatformProvider {
     /** Initializes platform-specific resources. Returns true if successful. */
     fun initialize(activity: Activity): Boolean
-    /** Returns the list of runtime permissions required by this platform. */
+    /** Returns the runtime permissions the SDK needs before it can initialize on this platform. */
     fun getRequiredPermissions(): Array<String>
+    /** Returns runtime permissions that improve tracking but must not block initialization (features degrade gracefully when denied). */
+    fun getOptionalPermissions(): Array<String> = emptyArray()
     /** Returns the provider responsible for head/HMD pose and gaze tracking. */
     fun getHeadTrackingProvider(): HeadTrackingProvider
     /** Returns the provider responsible for controller and hand tracking. */

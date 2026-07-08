@@ -104,7 +104,14 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
 
     override fun getRequiredPermissions(): Array<String> = arrayOf(
         "android.permission.HEAD_TRACKING",
-        "android.permission.HAND_TRACKING",
+        "android.permission.HAND_TRACKING"
+    )
+
+    // Eye tracking degrades gracefully via the configureSession fallback tiers
+    // (configure() throws SecurityException for ungranted modes), so these must
+    // not block SDK initialization: target glasses devices and privacy-conscious
+    // users frequently cannot or will not grant them.
+    override fun getOptionalPermissions(): Array<String> = arrayOf(
         "android.permission.EYE_TRACKING_COARSE",
         "android.permission.EYE_TRACKING_FINE"
     )

@@ -26,6 +26,7 @@ class Cognitive3DInitializer : ContentProvider() {
             application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
                 private var isChangingConfiguration = false
                 private var sessionInitialized = false
+                private var permissionsRequested = false
                 private var platformProvider: PlatformProvider? = null
 
                 override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -40,8 +41,14 @@ class Cognitive3DInitializer : ContentProvider() {
                     if (!sessionInitialized) {
                         if (hasRequiredPermissions(activity)) {
                             initializePlatform(activity)
-                        } else {
+                        } else if (!permissionsRequested) {
+                            // Ask at most once per process: onActivityResumed fires again
+                            // after the dialog closes, and re-requesting on every resume
+                            // traps the user in a permission-prompt loop on denial.
+                            permissionsRequested = true
                             requestRequiredPermissions(activity)
+                        } else {
+                            Log.w(Util.TAG, "Required permissions not granted; Cognitive3D will not start this session")
                         }
                     } else {
                         Cognitive3DManager.resumeSession()
@@ -87,9 +94,11 @@ class Cognitive3DInitializer : ContentProvider() {
 
                 private fun requestRequiredPermissions(activity: Activity) {
                     val provider = getOrCreateProvider(activity)
+                    // Request optional permissions in the same dialog, but only the
+                    // required ones gate initialization (hasRequiredPermissions).
                     ActivityCompat.requestPermissions(
                         activity,
-                        provider.getRequiredPermissions(),
+                        provider.getRequiredPermissions() + provider.getOptionalPermissions(),
                         PERMISSION_REQUEST_CODE
                     )
                 }
