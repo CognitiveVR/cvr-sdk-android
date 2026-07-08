@@ -124,6 +124,11 @@ object Serialization {
         resetDynamicBuilder()
         resetSensors()
         resetBoundary()
+
+        // A new session must re-send every known session property: the dirty-delta
+        // mechanism only emits changed values, which would otherwise suppress all
+        // device metadata for the second and later sessions in the same process.
+        dirtySessionProperties.putAll(allSessionProperties)
         
         CoroutineScope(Dispatchers.IO).launch {
             initializationMutex.withLock {
@@ -355,10 +360,10 @@ object Serialization {
 
     private fun StringBuilder.appendJsonValue(value: Any?) {
         when (value) {
-            is String -> append('"').append(value).append('"')
+            is String -> appendJsonString(value)
             is Number, is Boolean -> append(value)
             null -> append("null")
-            else -> append('"').append(value).append('"')
+            else -> appendJsonString(value.toString())
         }
     }
 

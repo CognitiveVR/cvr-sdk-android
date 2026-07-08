@@ -2,6 +2,8 @@ package com.cognitive3d.android
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import com.meta.spatial.runtime.VrActivity
 
 class MetaQuestPlatformProvider : PlatformProvider {
@@ -40,13 +42,21 @@ class MetaQuestPlatformProvider : PlatformProvider {
     }
 
     // "oculus.software.*" are the feature strings Meta documents for manifest
-    // <uses-feature> declarations; devices declare them as system features
-    // (eye tracking: Quest Pro only, hand tracking: all current Quests).
+    // <uses-feature> declarations (eye tracking: Quest Pro only, hand tracking:
+    // all current Quests). Whether Quest OS reports them via hasSystemFeature is
+    // unverified on hardware — check `adb shell pm list features` before release.
     override fun isEyeTrackingAvailable(): Boolean =
         appContext?.packageManager?.hasSystemFeature("oculus.software.eye_tracking") ?: false
 
-    override fun isHandTrackingAvailable(): Boolean =
-        appContext?.packageManager?.hasSystemFeature("oculus.software.handtracking") ?: false
+    override fun isHandTrackingAvailable(): Boolean {
+        val context = appContext ?: return false
+        // The granted HAND_TRACKING permission (requested at init) is the regression
+        // guard in case the feature probe returns false on Quest OS: the old value
+        // was hardcoded true, and all current Quests support hand tracking.
+        return context.packageManager.hasSystemFeature("oculus.software.handtracking") ||
+            ContextCompat.checkSelfPermission(context, "com.oculus.permission.HAND_TRACKING") ==
+                PackageManager.PERMISSION_GRANTED
+    }
 
     override fun destroy() {
 

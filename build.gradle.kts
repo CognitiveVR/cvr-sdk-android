@@ -69,6 +69,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+        // Emit real JVM default methods for interface defaults so Java implementors
+        // of public interfaces (e.g. PlatformProvider) stay source/binary compatible.
+        freeCompilerArgs += listOf("-Xjvm-default=all")
     }
 }
 

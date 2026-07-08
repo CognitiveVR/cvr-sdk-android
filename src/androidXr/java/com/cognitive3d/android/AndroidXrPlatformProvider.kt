@@ -51,16 +51,18 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
     }
 
     /**
-     * Configures the session with progressively reduced configs: full tracking,
-     * then without eye tracking, then without eye and hand tracking. configure()
-     * throws UnsupportedOperationException for unsupported modes (as of alpha07
-     * there is no not-supported result type), so without the fallbacks the whole
-     * session would fail to start on devices lacking eye or hand tracking.
+     * Configures the session with progressively reduced configs covering every
+     * eye/hand support combination, so the accepted tier is an accurate
+     * capability readback. configure() throws UnsupportedOperationException for
+     * unsupported modes (as of alpha07 there is no not-supported result type),
+     * so without the fallbacks the whole session would fail to start on devices
+     * lacking eye or hand tracking.
      */
     private fun configureSession(session: Session): SessionConfigureResult? {
         val candidateModes = listOf(
             EyeTrackingMode.FINE_TRACKING to HandTrackingMode.BOTH,
             EyeTrackingMode.DISABLED to HandTrackingMode.BOTH,
+            EyeTrackingMode.FINE_TRACKING to HandTrackingMode.DISABLED,
             EyeTrackingMode.DISABLED to HandTrackingMode.DISABLED
         )
         for ((eyeMode, handMode) in candidateModes) {
@@ -91,6 +93,12 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
             session.configure(config)
         } catch (e: UnsupportedOperationException) {
             Log.w(Util.TAG, "XR config not supported (eye=$eyeMode, hand=$handMode)")
+            null
+        } catch (e: SecurityException) {
+            // configure() throws SecurityException when a requested mode's permission
+            // isn't granted (alpha05+); treat it as a tier failure so a reduced tier
+            // that needs fewer permissions can still succeed.
+            Log.w(Util.TAG, "XR config permission not granted (eye=$eyeMode, hand=$handMode)")
             null
         }
 
