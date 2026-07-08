@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 
 object Cognitive3DManager {
-    private const val SDK_VERSION: String = "1.1.0"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
@@ -224,7 +223,7 @@ object Cognitive3DManager {
         }
 
         // App & SDK Info
-        setSessionProperty("c3d.version", SDK_VERSION)
+        setSessionProperty("c3d.version", BuildConfig.SDK_VERSION)
         setSessionProperty("c3d.app.engine", BuildConfig.SDK_ARTIFACT_ID)
         setSessionProperty("c3d.app.version", appVersion)
         setSessionProperty("c3d.app.sdktype", "Default")

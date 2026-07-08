@@ -19,6 +19,9 @@ android {
     defaultConfig {
         minSdk = 29
         consumerProguardFiles("consumer-rules.pro")
+        // Single source of truth for the SDK version reported in c3d.version:
+        // VERSION_NAME in gradle.properties (also used for Maven publishing).
+        buildConfigField("String", "SDK_VERSION", "\"${getProperty("VERSION_NAME")}\"")
     }
 
     buildFeatures {
