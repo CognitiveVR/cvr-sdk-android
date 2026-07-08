@@ -3,6 +3,7 @@ package com.cognitive3d.android
 import androidx.xr.arcore.Hand
 import androidx.xr.arcore.HandJointType
 import androidx.xr.runtime.Session
+import kotlinx.coroutines.CancellationException
 
 class AndroidXrControllerTrackingProvider(private val session: Session) : ControllerTrackingProvider {
 
@@ -28,6 +29,8 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
             } else {
                 ControllerType.NONE
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             ControllerType.NONE
         }
@@ -40,6 +43,8 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
             val handPose = handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST]
                 ?: return null
             handPose.toPoseDataFromPerception(session)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
