@@ -23,7 +23,7 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
         return try {
             val hand = if (isRight) rightHand else leftHand
             val handState = hand?.state?.value ?: return ControllerType.NONE
-            if (handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST] != null) {
+            if (handState.handJoints[HandJointType.WRIST] != null) {
                 ControllerType.HAND
             } else {
                 ControllerType.NONE
@@ -37,7 +37,7 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
         return try {
             val hand = if (isRight) rightHand else leftHand
             val handState = hand?.state?.value ?: return null
-            val handPose = handState.handJoints[HandJointType.HAND_JOINT_TYPE_WRIST]
+            val handPose = handState.handJoints[HandJointType.WRIST]
                 ?: return null
             handPose.toPoseDataFromPerception(session)
         } catch (e: Exception) {

@@ -4,6 +4,7 @@ import androidx.xr.runtime.Session
 import androidx.xr.runtime.math.Vector3
 import androidx.xr.scenecore.Entity
 import androidx.xr.scenecore.GltfModelEntity
+import androidx.xr.scenecore.Space
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.sqrt
 
@@ -17,7 +18,7 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
     override fun getStateFromTrackable(trackable: Any): DynamicTrackableState? {
         if (trackable is Entity) {
             return try {
-                val pose = trackable.activitySpacePose.toPoseDataFromActivity()
+                val pose = trackable.getPose(Space.ACTIVITY).toPoseDataFromActivity()
                 val scale = trackable.getScale().toScaleData()
                 val enabled = trackable.isEnabled()
                 DynamicTrackableState(pose, scale, enabled)
@@ -75,7 +76,7 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
             val entity = obj.trackableRef as? Entity ?: continue
 
             // Get entity's world pose (right-handed activity space)
-            val worldPose = try { entity.activitySpacePose } catch (e: IllegalStateException) { continue }
+            val worldPose = try { entity.getPose(Space.ACTIVITY) } catch (e: IllegalStateException) { continue }
             val invPose = worldPose.inverse()
 
             // Transform ray into entity local space

@@ -71,10 +71,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Jetpack XR dependencies (androidXr flavor only)
-    "androidXrImplementation"("androidx.xr.compose:compose:1.0.0-alpha10")
-    "androidXrImplementation"("androidx.xr.scenecore:scenecore:1.0.0-alpha10")
-    "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-alpha10")
-    "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-alpha10")
+    "androidXrImplementation"("androidx.xr.compose:compose:1.0.0-alpha16")
+    "androidXrImplementation"("androidx.xr.scenecore:scenecore:1.0.0-beta01")
+    "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-beta01")
+    "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-beta01")
 
     // Meta Spatial SDK dependencies (metaSpatial flavor only)
     "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk:0.10.1")
