@@ -140,5 +140,12 @@ mavenPublishing {
     }
 
     publishToMavenCentral()
-    signAllPublications()
+
+    // Sign only when publishing credentials are configured, so consumers and
+    // contributors without GPG keys can still publishToMavenLocal.
+    if (providers.gradleProperty("signingInMemoryKey").isPresent ||
+        providers.gradleProperty("signing.keyId").isPresent
+    ) {
+        signAllPublications()
+    }
 }
