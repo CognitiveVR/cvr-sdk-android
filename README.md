@@ -1,13 +1,20 @@
+<!-- markdownlint-disable MD033 -->
+
 # The Cognitive3D SDK for Android
 
+<!-- markdownlint-disable-next-line MD013 -->
 Welcome! This SDK allows you to integrate your native Android projects with Cognitive3D, which provides analytics and insights about your project. In addition, Cognitive3D empowers you to take actions that will improve users' engagement with your experience.
 
 **Supported Platforms:**
+
 - Android XR (Jetpack XR)
 - Meta Spatial SDK
 
 **Requirements:**
-- Android Studio Ladybug (2024.2.1) or later
+
+- Android Studio Narwhal (2025.1.1) or later (the SDK builds with AGP 8.11)
+<!-- markdownlint-disable-next-line MD013 -->
+- Compile SDK: 36 (required by the Jetpack XR `1.0.0-beta01` dependencies on Android XR)
 - Minimum SDK: 29
 - Kotlin 1.9+ or Java 11+
 
@@ -127,6 +134,7 @@ tasks.register("generateCognitiveConfig") {
     }
 }
 ```
+
 </details>
 
 <details>
@@ -171,6 +179,7 @@ tasks.register("generateCognitiveConfig") {
     }
 }
 ```
+
 </details>
 
 #### 2. Run the Task
@@ -186,8 +195,9 @@ The config file will be created at `app/src/main/assets/cognitive3d.json`.
 Open the generated `cognitive3d.json` and update the following values:
 
 | Field | Description |
-|-------|-------------|
+| ----- | ----------- |
 | `api_key` | Your Cognitive3D API key from the dashboard |
 | `scene_settings.id` | Your scene ID from the Cognitive3D dashboard |
 | `scene_settings.version` | Your scene version number |
+<!-- markdownlint-disable-next-line MD013 -->
 | `scene_settings.path` | Your main activity path (e.g., `com.myapp.MainActivity`) |

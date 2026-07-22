@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.util.Log
 import androidx.xr.runtime.Config
+import androidx.xr.runtime.DeviceTrackingMode
+import androidx.xr.runtime.EyeTrackingMode
+import androidx.xr.runtime.HandTrackingMode
 import androidx.xr.runtime.Session
 import androidx.xr.runtime.SessionConfigureSuccess
 import androidx.xr.runtime.SessionCreateSuccess
@@ -21,12 +24,12 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
             val result = Session.create(activity)
             if (result is SessionCreateSuccess) {
                 session = result.session
-                val newConfig = result.session.config.copy(
-                    // For androidx.xr.runtime:runtime:1.0.0-alpha10
-                    deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
-                    handTracking = Config.HandTrackingMode.BOTH,
-                    eyeTracking = Config.EyeTrackingMode.FINE_TRACKING
-                )
+                val newConfig = Config.Builder(result.session.config)
+                    // SPATIAL is the renamed successor of alpha10's LAST_KNOWN mode
+                    .setDeviceTracking(DeviceTrackingMode.SPATIAL)
+                    .setHandTracking(HandTrackingMode.BOTH)
+                    .setEyeTracking(EyeTrackingMode.FINE_TRACKING)
+                    .build()
                 val configResult = result.session.configure(newConfig)
                 if (configResult is SessionConfigureSuccess) {
                     headTrackingProvider = AndroidXrHeadTrackingProvider(result.session)
