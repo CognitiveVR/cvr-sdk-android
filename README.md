@@ -24,13 +24,16 @@ Please join our [Discord](https://discord.gg/x38sNUdDRH) for community support.
 
 ## License
 
+<!-- markdownlint-disable-next-line MD013 -->
 Licensed under the Cognitive3D SDK Software License. See [LICENSE](LICENSE) for details.
 
 ## Quickstart
 
 ### Installation
 
-Add the Cognitive3D SDK to your project's `build.gradle` file:
+Add the Cognitive3D SDK to your project's `build.gradle` file.
+Pin an explicit version — avoid `+` dynamic versions, which can
+pull a new release with different build requirements without warning:
 
 #### Android XR (Jetpack XR)
 
@@ -39,7 +42,7 @@ Add the Cognitive3D SDK to your project's `build.gradle` file:
 
 ```kotlin
 dependencies {
-    implementation("com.cognitive3d:android-xr-sdk:+")
+    implementation("com.cognitive3d:android-xr-sdk:1.1.0")
 }
 ```
 
@@ -50,7 +53,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.cognitive3d:android-xr-sdk:+'
+    implementation 'com.cognitive3d:android-xr-sdk:1.1.0'
 }
 ```
 
@@ -63,7 +66,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("com.cognitive3d:meta-spatial-sdk:+")
+    implementation("com.cognitive3d:meta-spatial-sdk:1.1.0")
 }
 ```
 
@@ -74,7 +77,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.cognitive3d:meta-spatial-sdk:+'
+    implementation 'com.cognitive3d:meta-spatial-sdk:1.1.0'
 }
 ```
 
