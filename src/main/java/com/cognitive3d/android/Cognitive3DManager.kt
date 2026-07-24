@@ -245,7 +245,7 @@ object Cognitive3DManager {
         setSessionProperty("c3d.device.os.version", Build.VERSION.RELEASE ?: "Unknown")
         setSessionProperty("c3d.device.os.sdk_int", Build.VERSION.SDK_INT)
         setSessionProperty("c3d.device.cpu", Build.HARDWARE ?: "Unknown")
-        setSessionProperty("c3d.device.cpu.vendor", Build.MANUFACTURER ?: "Unknown")
+        setSessionProperty("c3d.device.cpu.vendor", getSocManufacturer())
 
         // Memory (bytes)
         setSessionProperty("c3d.device.memory", getTotalMemoryBytes(context))
@@ -286,6 +286,17 @@ object Cognitive3DManager {
         setSessionProperty("c3d.device.eyetracking.enabled", provider.isEyeTrackingAvailable())
         setSessionProperty("c3d.device.controllerinputs.enabled", detectControllerInputs(provider))
         setSessionProperty("c3d.app.handtracking.enabled", provider.isHandTrackingAvailable())
+    }
+
+    /**
+     * Returns the SoC manufacturer (Build.SOC_MANUFACTURER is API 31+); "Unknown" below that or when the platform reports it as unknown.
+     */
+    private fun getSocManufacturer(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Build.SOC_MANUFACTURER.takeUnless { it == Build.UNKNOWN } ?: "Unknown"
+        } else {
+            "Unknown"
+        }
     }
 
     /**
