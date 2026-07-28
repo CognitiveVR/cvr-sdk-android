@@ -50,9 +50,6 @@ class MetaQuestPlatformProvider : PlatformProvider {
 
     override fun isHandTrackingAvailable(): Boolean {
         val context = appContext ?: return false
-        // The granted HAND_TRACKING permission (requested at init) is the regression
-        // guard in case the feature probe returns false on Quest OS: the old value
-        // was hardcoded true, and all current Quests support hand tracking.
         return context.packageManager.hasSystemFeature("oculus.software.handtracking") ||
             ContextCompat.checkSelfPermission(context, "com.oculus.permission.HAND_TRACKING") ==
                 PackageManager.PERMISSION_GRANTED
