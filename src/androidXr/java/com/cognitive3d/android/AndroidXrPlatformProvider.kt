@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.util.Log
 import androidx.xr.runtime.Config
+import androidx.xr.runtime.DeviceTrackingMode
+import androidx.xr.runtime.EyeTrackingMode
+import androidx.xr.runtime.HandTrackingMode
 import androidx.xr.runtime.Session
 import androidx.xr.runtime.SessionConfigureResult
 import androidx.xr.runtime.SessionConfigureSuccess
@@ -57,25 +60,24 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
      * usable — not an all-or-nothing default.
      */
     private fun configureSession(session: Session): SessionConfigureResult? {
-        val desiredConfig = session.config.copy(
-            // For androidx.xr.runtime:runtime:1.0.0-alpha10
-            deviceTracking = Config.DeviceTrackingMode.LAST_KNOWN,
-            handTracking = Config.HandTrackingMode.BOTH,
-            eyeTracking = Config.EyeTrackingMode.FINE_TRACKING
-        )
         val eyeModes = listOf(
-            Config.EyeTrackingMode.FINE_TRACKING,
-            Config.EyeTrackingMode.COARSE_TRACKING,
-            Config.EyeTrackingMode.DISABLED
+            EyeTrackingMode.FINE_TRACKING,
+            EyeTrackingMode.COARSE_TRACKING,
+            EyeTrackingMode.DISABLED
         )
-        val handModes = listOf(Config.HandTrackingMode.BOTH, Config.HandTrackingMode.DISABLED)
+        val handModes = listOf(HandTrackingMode.BOTH, HandTrackingMode.DISABLED)
         for (handMode in handModes) {
             for (eyeMode in eyeModes) {
-                val candidate = desiredConfig.copy(eyeTracking = eyeMode, handTracking = handMode)
-                val result = tryConfigure(session, candidate)
+                val candidate = Config.Builder(session.config)
+                    // SPATIAL is the renamed successor of alpha10's LAST_KNOWN mode
+                    .setDeviceTracking(DeviceTrackingMode.SPATIAL)
+                    .setHandTracking(handMode)
+                    .setEyeTracking(eyeMode)
+                    .build()
+                val result = tryConfigure(session, candidate, eyeMode, handMode)
                 if (result is SessionConfigureSuccess) {
-                    eyeTrackingAvailable = eyeMode != Config.EyeTrackingMode.DISABLED
-                    handTrackingAvailable = handMode == Config.HandTrackingMode.BOTH
+                    eyeTrackingAvailable = eyeMode != EyeTrackingMode.DISABLED
+                    handTrackingAvailable = handMode == HandTrackingMode.BOTH
                     return result
                 }
             }
@@ -84,17 +86,22 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
         return null
     }
 
-    private fun tryConfigure(session: Session, config: Config): SessionConfigureResult? =
+    private fun tryConfigure(
+        session: Session,
+        config: Config,
+        eyeMode: EyeTrackingMode,
+        handMode: HandTrackingMode
+    ): SessionConfigureResult? =
         try {
             session.configure(config)
         } catch (e: UnsupportedOperationException) {
-            Log.w(Util.TAG, "XR config not supported (eye=${config.eyeTracking}, hand=${config.handTracking})")
+            Log.w(Util.TAG, "XR config not supported (eye=$eyeMode, hand=$handMode)")
             null
         } catch (e: SecurityException) {
             // configure() throws SecurityException when a requested mode's permission
             // isn't granted (alpha05+); treat it as a tier failure so a reduced tier
             // that needs fewer permissions can still succeed.
-            Log.w(Util.TAG, "XR config permission not granted (eye=${config.eyeTracking}, hand=${config.handTracking})")
+            Log.w(Util.TAG, "XR config permission not granted (eye=$eyeMode, hand=$handMode)")
             null
         }
 

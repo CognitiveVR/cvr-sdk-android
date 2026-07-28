@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.library") version "8.4.0"
+    id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.1.0"
     id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"
     id("com.vanniktech.maven.publish") version "0.35.0"
@@ -7,14 +7,14 @@ plugins {
 
 // Single source of truth for the XR runtime versions: used both for the flavor
 // dependencies and for the raw runtime identifiers reported in session properties.
-val jetpackXrVersion = "1.0.0-alpha10"
+val jetpackXrVersion = "1.0.0-beta01"
 val metaSpatialSdkVersion = "0.10.1"
 val androidXrArtifactId = "android-xr-sdk"
 val metaSpatialArtifactId = "meta-spatial-sdk"
 
 android {
     namespace = "com.cognitive3d.android"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 29
@@ -159,5 +159,12 @@ mavenPublishing {
     }
 
     publishToMavenCentral()
-    signAllPublications()
+
+    // Sign only when publishing credentials are configured, so consumers and
+    // contributors without GPG keys can still publishToMavenLocal.
+    if (providers.gradleProperty("signingInMemoryKey").isPresent ||
+        providers.gradleProperty("signing.keyId").isPresent
+    ) {
+        signAllPublications()
+    }
 }
