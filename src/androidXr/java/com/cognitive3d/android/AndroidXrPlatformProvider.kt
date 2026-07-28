@@ -22,6 +22,7 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
     private var dynamicObjectProvider: AndroidXrDynamicObjectProvider? = null
 
     @SuppressLint("RestrictedApi")
+    @Suppress("DEPRECATION")
     override fun initialize(activity: Activity): Boolean {
         return try {
             val result = Session.create(activity)
