@@ -10,7 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.meta.spatial.toolkit.ControllerType
 
-class MetaQuestControllerTrackingProvider(private val scene: Scene) : ControllerTrackingProvider {
+class MetaQuestControllerTrackingProvider(
+    private val scene: Scene,
+    // Returns false once the Meta VR scene is being torn down. Guards against
+    // querying the scene during the end of session final flush
+    private val isSessionActive: () -> Boolean = { true }
+) : ControllerTrackingProvider {
     override fun start() {
     }
 
@@ -20,6 +25,7 @@ class MetaQuestControllerTrackingProvider(private val scene: Scene) : Controller
     @OptIn(SpatialSDKExperimentalAPI::class)
     override suspend fun getActiveControllerType(isRight: Boolean): com.cognitive3d.android.ControllerType =
     withContext(Dispatchers.Main) {
+        if (!isSessionActive()) return@withContext com.cognitive3d.android.ControllerType.NONE
         try {
             val controllers = Query.where { has(Controller.id) }.eval().filter { it.isLocal() }.toList()
 
@@ -44,6 +50,7 @@ class MetaQuestControllerTrackingProvider(private val scene: Scene) : Controller
 
     @OptIn(SpatialSDKExperimentalAPI::class)
     override suspend fun getHandPose(isRight: Boolean): PoseData? = withContext(Dispatchers.Main) {
+        if (!isSessionActive()) return@withContext null
         try {
             val timestamp = SystemClock.elapsedRealtimeNanos()
             val controllerPose = scene.getControllerPoseAtTime(!isRight, timestamp)
@@ -58,6 +65,7 @@ class MetaQuestControllerTrackingProvider(private val scene: Scene) : Controller
     @OptIn(SpatialSDKExperimentalAPI::class)
     override suspend fun getControllerPose(isRight: Boolean): PoseData? =
         withContext(Dispatchers.Main) {
+        if (!isSessionActive()) return@withContext null
         try {
             val timestamp = SystemClock.elapsedRealtimeNanos()
             val controllerPose = scene.getControllerPoseAtTime(!isRight, timestamp)

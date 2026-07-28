@@ -13,13 +13,20 @@ class MetaQuestPlatformProvider : PlatformProvider {
     private var controllerTrackingProvider: MetaQuestControllerTrackingProvider? = null
     private var dynamicObjectProvider: MetaQuestDynamicObjectProvider? = null
 
+    // False once destroy() runs. Tracking providers check this so the end of session
+    // flush stops querying the scene after teardown (else the Spatial SDK logs a stack
+    // trace per entity). @Volatile for visibility on the flush coroutine's thread.
+    @Volatile
+    private var sessionActive = false
+
     override fun initialize(activity: Activity): Boolean {
         // Cast the activity to Meta's VrActivity to get the Scene
         if (activity is VrActivity) {
             appContext = activity.applicationContext
             headTrackingProvider = MetaQuestHeadTrackingProvider(activity.scene)
-            controllerTrackingProvider = MetaQuestControllerTrackingProvider(activity.scene)
-            dynamicObjectProvider = MetaQuestDynamicObjectProvider()
+            controllerTrackingProvider = MetaQuestControllerTrackingProvider(activity.scene) { sessionActive }
+            dynamicObjectProvider = MetaQuestDynamicObjectProvider { sessionActive }
+            sessionActive = true
             return true
         }
         return false
@@ -56,6 +63,6 @@ class MetaQuestPlatformProvider : PlatformProvider {
     }
 
     override fun destroy() {
-
+        sessionActive = false
     }
 }
