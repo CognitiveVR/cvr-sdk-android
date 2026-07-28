@@ -5,13 +5,6 @@ plugins {
     id("com.vanniktech.maven.publish") version "0.35.0"
 }
 
-// Single source of truth for the XR runtime versions: used both for the flavor
-// dependencies and for the raw runtime identifiers reported in session properties.
-val jetpackXrVersion = "1.0.0-beta01"
-val metaSpatialSdkVersion = "0.10.1"
-val androidXrArtifactId = "android-xr-sdk"
-val metaSpatialArtifactId = "meta-spatial-sdk"
-
 android {
     namespace = "com.cognitive3d.android"
     compileSdk = 36
@@ -33,15 +26,11 @@ android {
     productFlavors {
         create("androidXr") {
             dimension = "platform"
-            buildConfigField("String", "SDK_ARTIFACT_ID", "\"com.cognitive3d:$androidXrArtifactId\"")
             buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"androidx.xr.runtime\"")
-            buildConfigField("String", "XR_RUNTIME_VERSION", "\"$jetpackXrVersion\"")
         }
         create("metaSpatial") {
             dimension = "platform"
-            buildConfigField("String", "SDK_ARTIFACT_ID", "\"com.cognitive3d:$metaSpatialArtifactId\"")
             buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"meta.spatial.sdk\"")
-            buildConfigField("String", "XR_RUNTIME_VERSION", "\"$metaSpatialSdkVersion\"")
         }
     }
 
@@ -91,16 +80,16 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Jetpack XR dependencies (androidXr flavor only)
-    "androidXrImplementation"("androidx.xr.compose:compose:$jetpackXrVersion")
-    "androidXrImplementation"("androidx.xr.scenecore:scenecore:$jetpackXrVersion")
-    "androidXrImplementation"("androidx.xr.runtime:runtime:$jetpackXrVersion")
-    "androidXrImplementation"("androidx.xr.arcore:arcore:$jetpackXrVersion")
+    "androidXrImplementation"("androidx.xr.compose:compose:1.0.0-alpha16")
+    "androidXrImplementation"("androidx.xr.scenecore:scenecore:1.0.0-beta01")
+    "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-beta01")
+    "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-beta01")
 
     // Meta Spatial SDK dependencies (metaSpatial flavor only)
-    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk:$metaSpatialSdkVersion")
-    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:$metaSpatialSdkVersion")
-    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-vr:$metaSpatialSdkVersion")
-    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-physics:$metaSpatialSdkVersion")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-toolkit:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-vr:0.10.1")
+    "metaSpatialImplementation"("com.meta.spatial:meta-spatial-sdk-physics:0.10.1")
 }
 
 // Helper function to get properties with defaults
@@ -113,8 +102,8 @@ val flavorToBuild = providers.gradleProperty("FLAVOR").getOrElse("androidXr")
 
 mavenPublishing {
     val artifactId = when (flavorToBuild) {
-        "metaSpatial" -> metaSpatialArtifactId
-        else -> androidXrArtifactId
+        "metaSpatial" -> "meta-spatial-sdk"
+        else -> "android-xr-sdk"
     }
 
     coordinates(
