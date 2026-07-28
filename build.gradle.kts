@@ -12,19 +12,25 @@ android {
     defaultConfig {
         minSdk = 29
         consumerProguardFiles("consumer-rules.pro")
+        // Single source of truth for the SDK version reported in c3d.version:
+        // VERSION_NAME in gradle.properties (also used for Maven publishing).
+        buildConfigField("String", "SDK_VERSION", "\"${getProperty("VERSION_NAME")}\"")
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     flavorDimensions += "platform"
     productFlavors {
         create("androidXr") {
             dimension = "platform"
+            buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"androidx.xr.runtime\"")
         }
         create("metaSpatial") {
             dimension = "platform"
+            buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"meta.spatial.sdk\"")
         }
     }
 
@@ -55,6 +61,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+        // Emit real JVM default methods for interface defaults so Java implementors
+        // of public interfaces (e.g. PlatformProvider) stay source/binary compatible.
+        freeCompilerArgs += listOf("-Xjvm-default=all")
     }
 }
 
@@ -71,8 +80,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Jetpack XR dependencies (androidXr flavor only)
-    // (androidx.xr.compose intentionally absent: nothing in this SDK uses it,
-    // and carrying it would export a dead dependency in the consumer POM)
+    "androidXrImplementation"("androidx.xr.compose:compose:1.0.0-alpha16")
     "androidXrImplementation"("androidx.xr.scenecore:scenecore:1.0.0-beta01")
     "androidXrImplementation"("androidx.xr.runtime:runtime:1.0.0-beta01")
     "androidXrImplementation"("androidx.xr.arcore:arcore:1.0.0-beta01")

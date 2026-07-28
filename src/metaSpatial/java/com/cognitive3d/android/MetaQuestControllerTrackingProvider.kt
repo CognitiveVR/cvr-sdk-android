@@ -5,6 +5,7 @@ import com.meta.spatial.core.Query
 import com.meta.spatial.core.SpatialSDKExperimentalAPI
 import com.meta.spatial.runtime.Scene
 import com.meta.spatial.toolkit.Controller
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.meta.spatial.toolkit.ControllerType
@@ -33,6 +34,8 @@ class MetaQuestControllerTrackingProvider(private val scene: Scene) : Controller
                 ControllerType.CONTROLLER -> com.cognitive3d.android.ControllerType.CONTROLLER
                 else -> com.cognitive3d.android.ControllerType.NONE
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Gracefully return NONE if the native session is shutting down
             com.cognitive3d.android.ControllerType.NONE
@@ -45,6 +48,8 @@ class MetaQuestControllerTrackingProvider(private val scene: Scene) : Controller
             val timestamp = SystemClock.elapsedRealtimeNanos()
             val controllerPose = scene.getControllerPoseAtTime(!isRight, timestamp)
             controllerPose.pose.toPoseData()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -57,6 +62,8 @@ class MetaQuestControllerTrackingProvider(private val scene: Scene) : Controller
             val timestamp = SystemClock.elapsedRealtimeNanos()
             val controllerPose = scene.getControllerPoseAtTime(!isRight, timestamp)
             controllerPose.pose.toPoseData()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }

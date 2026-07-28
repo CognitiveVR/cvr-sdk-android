@@ -75,6 +75,9 @@ fastlane/test_output
 # macOS
 .DS_Store
 
+# Claude Code personal notes
+.claude.local.md
+
 # CMake
 cmake-build-debug/
 cmake-build-release/
