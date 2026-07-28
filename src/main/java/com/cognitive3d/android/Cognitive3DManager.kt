@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 
 object Cognitive3DManager {
-    private const val SDK_VERSION: String = "1.2.0"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
@@ -225,9 +224,8 @@ object Cognitive3DManager {
 
         // App & SDK Info
         setSessionProperty("c3d.version", BuildConfig.SDK_VERSION)
-        setSessionProperty("c3d.app.engine", BuildConfig.SDK_ARTIFACT_ID)
+        setSessionProperty("c3d.app.engine", "Android Native")
         setSessionProperty("c3d.app.version", appVersion)
-        setSessionProperty("c3d.app.sdktype", "Default")
         setSessionProperty("c3d.app.xrplugin", provider.getXrPluginName())
         setSessionProperty("c3d.app.inEditor", false)
         setSessionProperty("c3d.app.name", appName)
@@ -275,9 +273,6 @@ object Cognitive3DManager {
             packageManager.hasSystemFeature("android.hardware.xr.input.eye_tracking"))
         setSessionProperty("c3d.device.feature.vr",
             packageManager.hasSystemFeature("android.hardware.vr.headtracking"))
-
-        // XR runtime
-        setSessionProperty("c3d.device.runtime.version", provider.getXrRuntimeVersion())
 
         // Capabilities
         // Deprecated: duplicate of c3d.device.model under a misleading name. Kept
