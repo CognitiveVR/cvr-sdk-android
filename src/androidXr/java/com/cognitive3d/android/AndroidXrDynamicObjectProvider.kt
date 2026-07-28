@@ -1,11 +1,14 @@
 package com.cognitive3d.android
 
 import androidx.xr.runtime.Session
+import androidx.xr.runtime.math.BoundingBox
 import androidx.xr.runtime.math.Vector3
+import androidx.xr.scenecore.BoundsComponent
 import androidx.xr.scenecore.Entity
 import androidx.xr.scenecore.GltfModelEntity
 import androidx.xr.scenecore.Space
 import java.util.concurrent.ConcurrentHashMap
+import java.util.function.BiConsumer
 import kotlin.math.sqrt
 
 class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObjectProvider {
@@ -14,6 +17,13 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
         val minX: Float, val minY: Float, val minZ: Float,
         val maxX: Float, val maxY: Float, val maxZ: Float
     )
+
+    private class BoundsHook(
+        val component: BoundsComponent,
+        val listener: BiConsumer<Entity, BoundingBox>,
+        val createdByC3D: Boolean
+    )
+    private val hooks = ConcurrentHashMap<String, BoundsHook>()
 
     override fun getStateFromTrackable(trackable: Any): DynamicTrackableState? {
         if (trackable is Entity) {
@@ -31,21 +41,29 @@ class AndroidXrDynamicObjectProvider(private val session: Session) : DynamicObje
 
     override fun attachHitDetection(dynamicObject: DynamicObject) {
         val entity = dynamicObject.trackableRef as? GltfModelEntity ?: return
+        if (hooks.containsKey(dynamicObject.id)) return   // idempotent
 
-        // Cache the bounding box for ray-AABB intersection (only available on GltfModelEntity)
-        try {
-            val bbox = entity.getGltfModelBoundingBox()
+        val existing = entity.getComponentsOfType(BoundsComponent::class.java).firstOrNull()
+        val createdByC3D = existing == null
+        val bounds = existing ?: BoundsComponent.create(session).also { entity.addComponent(it) }
+
+        // Keep the exact instance so we can remove it later (SAM lambdas are not equal across calls)
+        val listener = BiConsumer<Entity, BoundingBox> { _, box ->
             boundingBoxes[dynamicObject.id] = BoundingBoxData(
-                bbox.min.x, bbox.min.y, bbox.min.z,
-                bbox.max.x, bbox.max.y, bbox.max.z
+                box.min.x, box.min.y, box.min.z,
+                box.max.x, box.max.y, box.max.z
             )
-        } catch (_: Exception) {
-            // glTF model may not be loaded yet — entity will still be tracked for pos/rot
         }
+        bounds.addBoundsUpdateListener(listener)
+        hooks[dynamicObject.id] = BoundsHook(bounds, listener, createdByC3D)
     }
 
     override fun detachHitDetection(dynamicObject: DynamicObject) {
-        if (dynamicObject.trackableRef !is GltfModelEntity) return
+        val hook = hooks.remove(dynamicObject.id) ?: return
+        hook.component.removeBoundsUpdateListener(hook.listener)
+        if (hook.createdByC3D) {
+            (dynamicObject.trackableRef as? Entity)?.removeComponent(hook.component)
+        }
         boundingBoxes.remove(dynamicObject.id)
     }
 
