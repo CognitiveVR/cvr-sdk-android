@@ -26,6 +26,7 @@ class Cognitive3DInitializer : ContentProvider() {
             application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
                 private var isChangingConfiguration = false
                 private var sessionInitialized = false
+                private var permissionsRequested = false
                 private var platformProvider: PlatformProvider? = null
 
                 override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -38,10 +39,26 @@ class Cognitive3DInitializer : ContentProvider() {
 
                 override fun onActivityResumed(activity: Activity) {
                     if (!sessionInitialized) {
-                        if (hasRequiredPermissions(activity)) {
+                        val provider = getOrCreateProvider(activity)
+                        val missingRequired = missingPermissions(activity, provider.getRequiredPermissions())
+                        val missingOptional = missingPermissions(activity, provider.getOptionalPermissions())
+                        if ((missingRequired.isNotEmpty() || missingOptional.isNotEmpty()) && !permissionsRequested) {
+                            // Ask at most once per process (re-requesting on every resume
+                            // traps the user in a prompt loop on denial), and ask even when
+                            // only optional permissions are missing — capability signals
+                            // like eye tracking must reflect a real user decision, not a
+                            // never-asked default. onActivityResumed fires again after the
+                            // dialog and initialization proceeds with whatever was granted.
+                            permissionsRequested = true
+                            ActivityCompat.requestPermissions(
+                                activity,
+                                (missingRequired + missingOptional).toTypedArray(),
+                                PERMISSION_REQUEST_CODE
+                            )
+                        } else if (missingRequired.isEmpty()) {
                             initializePlatform(activity)
                         } else {
-                            requestRequiredPermissions(activity)
+                            Log.w(Util.TAG, "Missing required permissions: $missingRequired — Cognitive3D will not start this session")
                         }
                     } else {
                         Cognitive3DManager.resumeSession()
@@ -73,25 +90,10 @@ class Cognitive3DInitializer : ContentProvider() {
                     return platformProvider ?: PlatformFactory.create(activity).also { platformProvider = it }
                 }
 
-                private fun hasRequiredPermissions(context: Context): Boolean {
-                    val provider = getOrCreateProvider(context as Activity)
-                    val permissions = provider.getRequiredPermissions()
-                    val missing = permissions.filter {
+                private fun missingPermissions(context: Context, permissions: Array<String>): List<String> {
+                    return permissions.filter {
                         ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
                     }
-                    if (missing.isNotEmpty()) {
-                        Log.w(Util.TAG, "Missing permissions: $missing")
-                    }
-                    return missing.isEmpty()
-                }
-
-                private fun requestRequiredPermissions(activity: Activity) {
-                    val provider = getOrCreateProvider(activity)
-                    ActivityCompat.requestPermissions(
-                        activity,
-                        provider.getRequiredPermissions(),
-                        PERMISSION_REQUEST_CODE
-                    )
                 }
 
                 private fun initializePlatform(activity: Activity) {

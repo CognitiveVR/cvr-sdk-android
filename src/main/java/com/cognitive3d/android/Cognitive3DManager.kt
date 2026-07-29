@@ -1,8 +1,10 @@
 package com.cognitive3d.android
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,7 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 
 object Cognitive3DManager {
-    private const val SDK_VERSION: String = "1.1.0"
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
@@ -204,8 +205,12 @@ object Cognitive3DManager {
 
     /**
      * Gathers and sets hardware and application metadata for the session.
+     *
+     * Sends raw device signals only — classification (device type, category,
+     * family) is computed downstream by the pipeline's Device Resolution
+     * Service, so no pre-classified values may be added here (C3D-1737).
      */
-    private fun setInternalSessionProperties(context: Context, provider: PlatformProvider)
+    private suspend fun setInternalSessionProperties(context: Context, provider: PlatformProvider)
     {
         val packageManager = context.packageManager
         val applicationInfo = context.applicationInfo
@@ -218,27 +223,31 @@ object Cognitive3DManager {
         }
 
         // App & SDK Info
-        setSessionProperty("c3d.version", SDK_VERSION)
+        setSessionProperty("c3d.version", BuildConfig.SDK_VERSION)
         setSessionProperty("c3d.app.engine", "Android Native")
-        setSessionProperty("c3d.app.engine.version", "Android SDK " + Build.VERSION.SDK_INT)
         setSessionProperty("c3d.app.version", appVersion)
-        setSessionProperty("c3d.app.sdktype", "Default")
         setSessionProperty("c3d.app.xrplugin", provider.getXrPluginName())
         setSessionProperty("c3d.app.inEditor", false)
         setSessionProperty("c3d.app.name", appName)
 
-        // Device ID & Type
+        // Device ID & raw identity signals
+        // Note: c3d.device.type is intentionally not sent — the pipeline derives it.
         setSessionProperty("c3d.deviceid", Serialization.userID)
-        setSessionProperty("c3d.device.type", "Mobile")
         setSessionProperty("c3d.device.model", Build.MODEL ?: "Unknown")
+        setSessionProperty("c3d.device.product", Build.PRODUCT ?: "Unknown")
+        setSessionProperty("c3d.device.brand", Build.BRAND ?: "Unknown")
+        setSessionProperty("c3d.device.codename", Build.DEVICE ?: "Unknown")
+        setSessionProperty("c3d.device.board", Build.BOARD ?: "Unknown")
+        setSessionProperty("c3d.device.fingerprint", Build.FINGERPRINT ?: "Unknown")
 
-        // Device Hardware
-        setSessionProperty("c3d.device.os", "Android OS " + Build.VERSION.RELEASE)
+        // OS & Hardware
+        setSessionProperty("c3d.device.os.version", Build.VERSION.RELEASE ?: "Unknown")
+        setSessionProperty("c3d.device.os.sdk_int", Build.VERSION.SDK_INT)
         setSessionProperty("c3d.device.cpu", Build.HARDWARE ?: "Unknown")
-        setSessionProperty("c3d.device.cpu.vendor", Build.MANUFACTURER ?: "Unknown")
+        setSessionProperty("c3d.device.cpu.vendor", getSocManufacturer())
 
-        // Memory
-        setSessionProperty("c3d.device.memory", 0.0)
+        // Memory (bytes)
+        setSessionProperty("c3d.device.memory", getTotalMemoryBytes(context))
 
         // GPU Info
         val gpuInfo = Util.getGpuInfo()
@@ -250,11 +259,75 @@ object Cognitive3DManager {
             setSessionProperty("c3d.device.gpu.vendor", "Unknown")
         }
 
+        // XR platform feature flags (raw PackageManager system features)
+        val hasSpatialApi = packageManager.hasSystemFeature("android.software.xr.api.spatial")
+        val hasOpenXrApi = packageManager.hasSystemFeature("android.software.xr.api.openxr")
+        setSessionProperty("c3d.device.feature.xr", hasSpatialApi || hasOpenXrApi)
+        setSessionProperty("c3d.device.feature.xr.spatial", hasSpatialApi)
+        setSessionProperty("c3d.device.feature.xr.openxr", hasOpenXrApi)
+        setSessionProperty("c3d.device.feature.xr.input.controller",
+            packageManager.hasSystemFeature("android.hardware.xr.input.controller"))
+        setSessionProperty("c3d.device.feature.xr.input.hand_tracking",
+            packageManager.hasSystemFeature("android.hardware.xr.input.hand_tracking"))
+        setSessionProperty("c3d.device.feature.xr.input.eye_tracking",
+            packageManager.hasSystemFeature("android.hardware.xr.input.eye_tracking"))
+        setSessionProperty("c3d.device.feature.vr",
+            packageManager.hasSystemFeature("android.hardware.vr.headtracking"))
+
         // Capabilities
+        // Deprecated: duplicate of c3d.device.model under a misleading name. Kept
+        // until dashboards are confirmed clear of readers (C3D-1737); do not add
+        // new consumers.
         setSessionProperty("c3d.device.hmd.type", Build.MODEL ?: "Unknown")
-        setSessionProperty("c3d.device.eyetracking.enabled", false)
-        setSessionProperty("c3d.device.controllerinputs.enabled", false)
-        setSessionProperty("c3d.app.handtracking.enabled", true)
+        setSessionProperty("c3d.device.eyetracking.enabled", provider.isEyeTrackingAvailable())
+        setSessionProperty("c3d.device.controllerinputs.enabled", detectControllerInputs(provider))
+        setSessionProperty("c3d.app.handtracking.enabled", provider.isHandTrackingAvailable())
+    }
+
+    /**
+     * Returns the SoC manufacturer (Build.SOC_MANUFACTURER is API 31+); "Unknown" below that or when the platform reports it as unknown.
+     */
+    private fun getSocManufacturer(): String {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Build.SOC_MANUFACTURER.takeUnless { it == Build.UNKNOWN } ?: "Unknown"
+        } else {
+            "Unknown"
+        }
+    }
+
+    /**
+     * Returns total device memory in bytes, or 0 if it cannot be determined.
+     */
+    private fun getTotalMemoryBytes(context: Context): Long {
+        return try {
+            val activityManager =
+                context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val memoryInfo = ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memoryInfo)
+            memoryInfo.totalMem
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    /**
+     * Returns true if either hand's active input device is a physical controller
+     * at the time of the query (session start). Hand-tracking-only platforms
+     * report false.
+     */
+    private suspend fun detectControllerInputs(provider: PlatformProvider): Boolean {
+        return try {
+            val controllerProvider = provider.getControllerTrackingProvider()
+            // start() is idempotent; DynamicManager calls it again when recording
+            // begins. Without it the providers haven't cached their input sources yet.
+            controllerProvider.start()
+            controllerProvider.getActiveControllerType(false) == ControllerType.CONTROLLER ||
+                controllerProvider.getActiveControllerType(true) == ControllerType.CONTROLLER
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
     }
 
     /**

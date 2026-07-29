@@ -3,8 +3,8 @@ package com.cognitive3d.android
 import android.util.Log
 import androidx.xr.arcore.ArDevice
 import androidx.xr.arcore.Eye
+import androidx.xr.arcore.TrackingState
 import androidx.xr.runtime.Session
-import androidx.xr.runtime.TrackingState
 import androidx.xr.runtime.math.Pose
 import androidx.xr.runtime.math.Quaternion
 import androidx.xr.scenecore.scene

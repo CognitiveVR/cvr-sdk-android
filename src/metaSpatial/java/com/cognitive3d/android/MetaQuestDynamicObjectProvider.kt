@@ -10,7 +10,11 @@ import com.meta.spatial.toolkit.Visible
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.sqrt
 
-class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
+class MetaQuestDynamicObjectProvider(
+    // Returns false once the Meta VR scene is being torn down. Guards against
+    // querying destroyed entities during the end of session final flush
+    private val isSessionActive: () -> Boolean = { true }
+) : DynamicObjectProvider {
     private val boundingBoxes = ConcurrentHashMap<String, BoundingBoxData>()
 
     private data class BoundingBoxData(
@@ -19,6 +23,8 @@ class MetaQuestDynamicObjectProvider : DynamicObjectProvider {
     )
 
     override fun getStateFromTrackable(trackable: Any): DynamicTrackableState? {
+        // Scene is gone during teardown. Don't touch the entity
+        if (!isSessionActive()) return null
         if (trackable is Entity) {
             return try {
                 val pose = trackable.getComponent<Transform>().transform.toPoseData()
