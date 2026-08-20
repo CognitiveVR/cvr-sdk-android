@@ -134,14 +134,18 @@ object Cognitive3DManager {
 
         val provider = platformProvider ?: return
 
-        val headProvider = provider.getHeadTrackingProvider()
-        val controllerProvider = provider.getControllerTrackingProvider()
-        val dynamicObjectProvider = provider.getDynamicObjectProvider()
-        GazeManager.startGazeRecording(scope, headProvider, dynamicObjectProvider)
-        DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
-        PerformanceMonitor.startMonitoring(scope)
-        startSensorProcessor()
-        startFlushTimer()
+        try {
+            val headProvider = provider.getHeadTrackingProvider()
+            val controllerProvider = provider.getControllerTrackingProvider()
+            val dynamicObjectProvider = provider.getDynamicObjectProvider()
+            GazeManager.startGazeRecording(scope, headProvider, dynamicObjectProvider)
+            DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
+            PerformanceMonitor.startMonitoring(scope)
+            startSensorProcessor()
+            startFlushTimer()
+        } catch (e: Exception) {
+            Log.e(Util.TAG, "Failed to resume recording loops", e)
+        }
 
         scope.launch {
             Serialization.serializeCustomEvents("c3d.pause", mapOf("ispaused" to false))

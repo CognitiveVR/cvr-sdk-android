@@ -16,9 +16,7 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
     private var rightEye: Eye? = null
 
     override fun start(scope: CoroutineScope) {
-        arDevice = ArDevice.getInstance(session)
-        leftEye = Eye.left(session)
-        rightEye = Eye.right(session)
+        acquireHandles()
     }
 
     override fun stop() {
@@ -27,9 +25,40 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
         rightEye = null
     }
 
+    /**
+     * Acquires the device/eye tracking handles. getHeadPose/getGazeRay retry
+     * via ensureDevice() on the next sample, so tracking self-heals once the
+     * runtime re-enables it
+     */
+    private fun acquireHandles() {
+        if (arDevice == null) {
+            arDevice = try {
+                ArDevice.getInstance(session)
+            } catch (e: IllegalStateException) {
+                Log.w(Util.TAG, "Device tracking unavailable; will retry", e)
+                null
+            }
+        }
+        if (leftEye == null) {
+            leftEye = try { Eye.left(session) } catch (e: IllegalStateException) { null }
+        }
+        if (rightEye == null) {
+            rightEye = try { Eye.right(session) } catch (e: IllegalStateException) { null }
+        }
+    }
+
+    /**
+     * Returns the ArDevice, re-attempting acquisition if a prior attempt failed
+     * (device tracking was disabled). Returns null while still unavailable.
+     */
+    private fun ensureDevice(): ArDevice? {
+        if (arDevice == null) acquireHandles()
+        return arDevice
+    }
+
     /** Returns the raw device/HMD pose only */
     override fun getHeadPose(): PoseData {
-        val device = arDevice ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
+        val device = ensureDevice() ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
         return try {
             device.state.value.devicePose.toPoseDataFromPerception(session)
         } catch (e: Exception) {
@@ -43,7 +72,7 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
      * Falls back to device-only pose if eye tracking is unavailable.
      */
     override fun getGazeRay(): GazeRayData {
-        val device = arDevice ?: return GazeRayData(0f, 0f, 0f, 0f, 0f, -1f)
+        val device = ensureDevice() ?: return GazeRayData(0f, 0f, 0f, 0f, 0f, -1f)
         return try {
             getEyeGaze(device) ?: device.state.value.devicePose.toGazeRayFromPerception(session)
         } catch (e: Exception) {
