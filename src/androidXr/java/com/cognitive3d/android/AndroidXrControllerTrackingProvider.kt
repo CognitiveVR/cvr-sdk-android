@@ -11,8 +11,8 @@ class AndroidXrControllerTrackingProvider(private val session: Session) : Contro
     private var rightHand: Hand? = null
 
     override fun start() {
-        leftHand = try { Hand.left(session) } catch (e: IllegalStateException) { null }
-        rightHand = try { Hand.right(session) } catch (e: IllegalStateException) { null }
+        leftHand = try { Hand.left(session) } catch (e: Exception) { null }
+        rightHand = try { Hand.right(session) } catch (e: Exception) { null }
     }
 
     override fun stop() {

@@ -34,16 +34,16 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
         if (arDevice == null) {
             arDevice = try {
                 ArDevice.getInstance(session)
-            } catch (e: IllegalStateException) {
+            } catch (e: Exception) {
                 Log.w(Util.TAG, "Device tracking unavailable; will retry", e)
                 null
             }
         }
         if (leftEye == null) {
-            leftEye = try { Eye.left(session) } catch (e: IllegalStateException) { null }
+            leftEye = try { Eye.left(session) } catch (e: Exception) { null }
         }
         if (rightEye == null) {
-            rightEye = try { Eye.right(session) } catch (e: IllegalStateException) { null }
+            rightEye = try { Eye.right(session) } catch (e: Exception) { null }
         }
     }
 
