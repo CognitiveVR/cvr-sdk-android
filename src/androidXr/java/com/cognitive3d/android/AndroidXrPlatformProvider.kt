@@ -30,7 +30,7 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
                 session = result.session
                 val configResult = configureSession(result.session)
                 if (configResult is SessionConfigureSuccess) {
-                    headTrackingProvider = AndroidXrHeadTrackingProvider(result.session)
+                    headTrackingProvider = AndroidXrHeadTrackingProvider(result.session, eyeTrackingAvailable)
                     controllerTrackingProvider = AndroidXrControllerTrackingProvider(result.session)
                     dynamicObjectProvider = AndroidXrDynamicObjectProvider(result.session)
                     true
