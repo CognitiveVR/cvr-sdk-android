@@ -10,26 +10,73 @@ import androidx.xr.runtime.math.Quaternion
 import androidx.xr.scenecore.scene
 import kotlinx.coroutines.*
 
-class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTrackingProvider {
+class AndroidXrHeadTrackingProvider(
+    private val session: Session,
+    private val eyeTrackingAvailable: Boolean
+) : HeadTrackingProvider {
     private var arDevice: ArDevice? = null
     private var leftEye: Eye? = null
     private var rightEye: Eye? = null
+    private var loggedUnavailable = false
+    private var lastAcquireAttemptMs = 0L
 
     override fun start(scope: CoroutineScope) {
-        arDevice = ArDevice.getInstance(session)
-        leftEye = Eye.left(session)
-        rightEye = Eye.right(session)
+        acquireHandles()
     }
 
     override fun stop() {
         arDevice = null
         leftEye = null
         rightEye = null
+        loggedUnavailable = false
+    }
+
+    /**
+     * Acquires the device/eye tracking handles. getHeadPose/getGazeRay retry
+     * via ensureDevice() on the next sample, so tracking self-heals once the
+     * runtime re-enables it
+     */
+    private fun acquireHandles() {
+        lastAcquireAttemptMs = System.currentTimeMillis()
+        if (arDevice == null) {
+            arDevice = try {
+                ArDevice.getInstance(session).also { loggedUnavailable = false }
+            } catch (e: Exception) {
+                if (!loggedUnavailable) {
+                    Log.w(Util.TAG, "Device tracking unavailable; will retry", e)
+                    loggedUnavailable = true
+                }
+                null
+            }
+        }
+
+        if (eyeTrackingAvailable) {
+            if (leftEye == null) {
+                leftEye = try { Eye.left(session) } catch (e: Exception) { null }
+            }
+            if (rightEye == null) {
+                rightEye = try { Eye.right(session) } catch (e: Exception) { null }
+            }
+        }
+    }
+
+    /**
+     * Returns the ArDevice, re-attempting acquisition if a prior attempt failed
+     * (device tracking was disabled). Returns null while still unavailable.
+     */
+    private fun ensureDevice(): ArDevice? {
+        val needsEyes = eyeTrackingAvailable && (leftEye == null || rightEye == null)
+        val needsHandles = arDevice == null || needsEyes
+        if (needsHandles &&
+            System.currentTimeMillis() - lastAcquireAttemptMs >= RETRY_INTERVAL_MS) {
+            acquireHandles()
+        }
+        return arDevice
     }
 
     /** Returns the raw device/HMD pose only */
     override fun getHeadPose(): PoseData {
-        val device = arDevice ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
+        val device = ensureDevice() ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
         return try {
             device.state.value.devicePose.toPoseDataFromPerception(session)
         } catch (e: Exception) {
@@ -43,7 +90,7 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
      * Falls back to device-only pose if eye tracking is unavailable.
      */
     override fun getGazeRay(): GazeRayData {
-        val device = arDevice ?: return GazeRayData(0f, 0f, 0f, 0f, 0f, -1f)
+        val device = ensureDevice() ?: return GazeRayData(0f, 0f, 0f, 0f, 0f, -1f)
         return try {
             getEyeGaze(device) ?: device.state.value.devicePose.toGazeRayFromPerception(session)
         } catch (e: Exception) {
@@ -118,5 +165,10 @@ class AndroidXrHeadTrackingProvider(private val session: Session) : HeadTracking
             wa * a.z + wb * bz,
             wa * a.w + wb * bw
         )
+    }
+
+    companion object {
+        /** Minimum gap between tracking-handle re-acquisition attempts while unavailable. */
+        private const val RETRY_INTERVAL_MS = 1000L
     }
 }
