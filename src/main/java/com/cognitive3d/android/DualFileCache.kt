@@ -147,6 +147,11 @@ class DualFileCache(context: Context, private val cacheLimit: Long = 1024 * 1024
         }
     }
 
+    @Synchronized
+    fun hasRoomFor(bytes: Long): Boolean {
+        return readFile.length() + writeFile.length() + bytes <= cacheLimit
+    }
+
     private fun canWrite(url: String, body: String): Boolean {
         val totalBytes = readFile.length() + writeFile.length()
         val newBytes = url.toByteArray(Charsets.UTF_8).size.toLong() + 

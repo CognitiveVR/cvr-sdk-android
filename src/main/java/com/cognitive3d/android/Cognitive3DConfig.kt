@@ -18,6 +18,8 @@ data class Cognitive3DConfig(
     val boundarySnapshotCount: Int = 64,
     val automaticSendTimer: Int = 10,
     val cacheLimit: Long = 1024 * 1024 * 100, // Default 100MB
+    // Off by default for privacy; also requires RECORD_AUDIO in the app manifest
+    val enableAudioRecording: Boolean = false,
     val sceneSettings: List<SceneSetting> = emptyList()
 ) {
     data class SceneSetting(
@@ -60,7 +62,8 @@ data class Cognitive3DConfig(
                     fixationSnapshotCount = json.optInt("fixation_snapshot_count", 256),
                     boundarySnapshotCount = json.optInt("boundary_snapshot_count", 64),
                     automaticSendTimer = json.optInt("automatic_send_timer", 10),
-                    cacheLimit = json.optLong("local_data_cache_size", 1024 * 1024 * 5),
+                    cacheLimit = json.optLong("local_data_cache_size", 1024 * 1024 * 100),
+                    enableAudioRecording = json.optBoolean("enable_audio_recording", false),
                     sceneSettings = scenes
                 )
             } catch (e: Exception) {
