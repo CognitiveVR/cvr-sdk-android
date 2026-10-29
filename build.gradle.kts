@@ -32,6 +32,11 @@ android {
             dimension = "platform"
             buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"meta.spatial.sdk\"")
         }
+        // Plain Android (phones, tablets, RealWear): no XR runtime, sensor-based 3DoF orientation
+        create("android") {
+            dimension = "platform"
+            buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"none\"")
+        }
     }
 
     sourceSets {
@@ -43,6 +48,9 @@ android {
         }
         getByName("metaSpatial") {
             java.srcDirs("src/metaSpatial/java")
+        }
+        getByName("android") {
+            java.srcDirs("src/android/java")
         }
     }
 
@@ -97,13 +105,14 @@ fun getProperty(key: String, default: String = ""): String {
     return providers.gradleProperty(key).getOrElse(default)
 }
 
-// Determine which flavor to publish (pass -PFLAVOR=androidXr or -PFLAVOR=metaSpatial)
+// Determine which flavor to publish (pass -PFLAVOR=androidXr, -PFLAVOR=metaSpatial or -PFLAVOR=android)
 val flavorToBuild = providers.gradleProperty("FLAVOR").getOrElse("androidXr")
 
 mavenPublishing {
     val artifactId = when (flavorToBuild) {
         "metaSpatial" -> "meta-spatial-sdk"
-        else -> "android-xr-sdk"
+        "androidXr" -> "android-xr-sdk"
+        else -> "android-sdk"
     }
 
     coordinates(

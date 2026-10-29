@@ -1,15 +1,16 @@
 <!-- markdownlint-disable MD013 -->
 # cvr-sdk-android
 
-Android XR analytics SDK. Two product flavors share `src/main`:
+Android XR analytics SDK. Three product flavors share `src/main`:
 
 - `androidXr` — Jetpack XR SDK (Samsung Galaxy XR, Xreal Aura, Warby Parker, Gentle Monster)
 - `metaSpatial` — Meta Spatial SDK (Meta Quest family)
+- `android` — plain Android, no XR runtime (phones, tablets, RealWear); 3DoF orientation from the rotation sensor
 
 ## Build & verify
 
 - Requires JDK 17 (AGP 8.4). Newer JDKs fail with a cryptic error whose message is just the Java version string.
-- `./gradlew compileAndroidXrDebugKotlin compileMetaSpatialDebugKotlin` — fast compile check. Verify BOTH flavors for any code change: they share `src/main`, so one flavor compiling says nothing about the other. (Docs-only changes don't need a build.)
+- `./gradlew compileAndroidXrDebugKotlin compileMetaSpatialDebugKotlin compileAndroidDebugKotlin` — fast compile check. Verify ALL flavors for any code change: they share `src/main`, so one flavor compiling says nothing about the others. (Docs-only changes don't need a build.)
 - No test infrastructure exists yet (planned: C3D-2035); compilation plus on-device runs are the only verification.
 
 ## Architecture constraints
@@ -22,5 +23,5 @@ Android XR analytics SDK. Two product flavors share `src/main`:
 
 ## Publishing
 
-- Manual, per flavor: pass `-PFLAVOR=androidXr|metaSpatial` (artifact ID differs — see the `mavenPublishing` block).
+- Manual, per flavor: pass `-PFLAVOR=androidXr|metaSpatial|android` (artifact ID differs — see the `mavenPublishing` block).
 - Check the release gate on C3D-1737 before tagging or publishing (pipeline dependencies + on-device verification).
