@@ -47,6 +47,10 @@ object Cognitive3DManager {
         config = loadedConfig
         platformProvider = provider
         Serialization.init(appContext, loadedConfig)
+        DeviceMonitor.init(appContext)
+        ExitReporter.onSessionStart(appContext, scope)
+        CrashReporter.install()
+        CrashReporter.sessionActive = true
         startSession(appContext, provider)
     }
 
@@ -76,6 +80,7 @@ object Cognitive3DManager {
                 GazeManager.startGazeRecording(scope, headProvider, dynamicObjectProvider)
                 DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
                 PerformanceMonitor.startMonitoring(scope)
+                DeviceMonitor.start(scope)
                 startFlushTimer()
             } catch (e: Exception) {
                 Log.e(Util.TAG, "Failed to start recording loops", e)
@@ -113,6 +118,7 @@ object Cognitive3DManager {
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
+        DeviceMonitor.stop()
         stopFlushTimer()
 
         scope.launch {
@@ -141,6 +147,7 @@ object Cognitive3DManager {
             GazeManager.startGazeRecording(scope, headProvider, dynamicObjectProvider)
             DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
             PerformanceMonitor.startMonitoring(scope)
+            DeviceMonitor.start(scope)
             startSensorProcessor()
             startFlushTimer()
         } catch (e: Exception) {
@@ -157,9 +164,12 @@ object Cognitive3DManager {
     {
         Log.d(Util.TAG, "Cognitive3D Session Ending")
 
+        CrashReporter.sessionActive = false
+        ExitReporter.onSessionEnd()
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
+        DeviceMonitor.stop()
         stopFlushTimer()
 
         val endTime = System.currentTimeMillis().toDouble() / 1000.0
