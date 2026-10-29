@@ -47,7 +47,18 @@ object NetworkManager {
     }
 
     /** Sends JSON content to the given URL, falling back to local cache on failure. */
+    /**
+     * Writes everything to the offline cache instead of the network, for sends that must finish
+     * immediately (the app is crashing). The cache is uploaded on the next launch.
+     */
+    @Volatile
+    var cacheOnly = false
+
     suspend fun send(url: String, content: String) {
+        if (cacheOnly) {
+            cache?.writeContent(url, content)
+            return
+        }
         if (lastRequestFailed) {
             val currentTime = System.currentTimeMillis()
             if (currentTime < lastFailureTime + (currentRetryDelay * 1000).toLong()) {

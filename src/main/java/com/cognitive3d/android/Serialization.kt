@@ -440,6 +440,60 @@ object Serialization {
         return eventBuilder.toString()
     }
 
+    /** Identifies a session so data can still be sent for it after its process is gone. */
+    data class SessionRecord(
+        val sessionId: String,
+        val userId: String,
+        val sessionTimestamp: Double,
+        val eventUrl: String,
+        val gazeUrl: String
+    )
+
+    fun currentSessionRecord() = SessionRecord(sessionID, userID, sessionTimestamp, eventURL, gazeURL)
+
+    /**
+     * Sends one event for an earlier session, e.g. its end reported at the next launch.
+     * Uses a high part number so it can't collide with the parts that session already sent.
+     */
+    suspend fun sendPastSessionEvent(record: SessionRecord, category: String, properties: Map<String, Any?>, eventTime: Double) {
+        val payload = StringBuilder(512).apply {
+            append("{\"data\":[{")
+            appendKeyValue("name", category)
+            appendKeyValue("time", eventTime)
+            append("\"point\":[0,0,0]")
+            if (properties.isNotEmpty()) {
+                append(",\"properties\":{")
+                appendProperties(properties)
+                append('}')
+            }
+            append("}],")
+            appendKeyValue("userid", record.userId)
+            appendKeyValue("timestamp", record.sessionTimestamp.toLong())
+            appendKeyValue("sessionid", record.sessionId)
+            appendKeyValue("part", PAST_SESSION_PART)
+            append("\"formatversion\":\"1.0\"}")
+        }.toString()
+        NetworkManager.send(record.eventUrl, payload)
+    }
+
+    /** Sets session properties (e.g. tags) on an earlier session. See [sendPastSessionEvent]. */
+    suspend fun sendPastSessionProperties(record: SessionRecord, properties: Map<String, Any?>) {
+        val payload = StringBuilder(256).apply {
+            append("{\"data\":[],")
+            appendKeyValue("userid", record.userId)
+            appendKeyValue("sessionid", record.sessionId)
+            appendKeyValue("timestamp", record.sessionTimestamp.toLong())
+            appendKeyValue("part", PAST_SESSION_PART)
+            appendKeyValue("interval", SNAPSHOT_INTERVAL)
+            append("\"formatversion\":\"1.0\",\"properties\":{")
+            appendProperties(properties)
+            append("}}")
+        }.toString()
+        NetworkManager.send(record.gazeUrl, payload)
+    }
+
+    private const val PAST_SESSION_PART = 10_000
+
     suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: PoseData? = null) {
         if (!isInitialized) {
             initializationMutex.withLock {
