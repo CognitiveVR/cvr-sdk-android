@@ -334,21 +334,40 @@ object Cognitive3DManager {
     /**
      * Returns the smaller side of the built-in display in density-independent pixels,
      * truncated to an integer, or 0 if it cannot be determined. Independent of the
-     * app's window, task, split-screen state, and the display the activity is on.
+     * app's window, task, and split-screen state.
+     *
+     * Display.getRealMetrics can report the app's own bounds instead of the display's
+     * (letterboxed or sandboxed apps), so the measured size is accepted only when both
+     * sides are within 1% of the current display mode's physical size; otherwise 0.
      */
     @Suppress("DEPRECATION")
     private fun getDefaultDisplaySmallestWidthDp(context: Context): Int {
         return try {
             val display = context.getSystemService(DisplayManager::class.java)
                 ?.getDisplay(Display.DEFAULT_DISPLAY) ?: return 0
+            val mode = display.mode ?: return 0
             val metrics = DisplayMetrics()
             display.getRealMetrics(metrics)
             if (metrics.density <= 0f) return 0
-            (minOf(metrics.widthPixels, metrics.heightPixels) / metrics.density).toInt()
+
+            val shortSidePixels = minOf(metrics.widthPixels, metrics.heightPixels)
+            val longSidePixels = maxOf(metrics.widthPixels, metrics.heightPixels)
+            val modeShortSidePixels = minOf(mode.physicalWidth, mode.physicalHeight)
+            val modeLongSidePixels = maxOf(mode.physicalWidth, mode.physicalHeight)
+            if (modeShortSidePixels <= 0 || modeLongSidePixels <= 0) return 0
+            if (!isWithinOnePercent(shortSidePixels, modeShortSidePixels) ||
+                !isWithinOnePercent(longSidePixels, modeLongSidePixels)
+            ) {
+                return 0
+            }
+            (shortSidePixels / metrics.density).toInt()
         } catch (e: Exception) {
             0
         }
     }
+
+    private fun isWithinOnePercent(measured: Int, expected: Int): Boolean =
+        Math.abs(measured - expected) <= expected / 100
 
     /**
      * Returns true if either hand's active input device is a physical controller
