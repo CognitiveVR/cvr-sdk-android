@@ -2,8 +2,11 @@ package com.cognitive3d.android
 
 import android.app.ActivityManager
 import android.content.Context
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Display
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -264,7 +267,7 @@ object Cognitive3DManager {
         setSessionProperty("c3d.device.memory", getTotalMemoryBytes(context))
         setSessionProperty(
             "c3d.device.screen.smallestWidthInDensityIndependentPixels",
-            context.resources.configuration.smallestScreenWidthDp
+            getDefaultDisplaySmallestWidthDp(context)
         )
 
         // GPU Info
@@ -325,6 +328,25 @@ object Cognitive3DManager {
             memoryInfo.totalMem
         } catch (e: Exception) {
             0L
+        }
+    }
+
+    /**
+     * Returns the smaller side of the built-in display in density-independent pixels,
+     * truncated to an integer, or 0 if it cannot be determined. Independent of the
+     * app's window, task, split-screen state, and the display the activity is on.
+     */
+    @Suppress("DEPRECATION")
+    private fun getDefaultDisplaySmallestWidthDp(context: Context): Int {
+        return try {
+            val display = context.getSystemService(DisplayManager::class.java)
+                ?.getDisplay(Display.DEFAULT_DISPLAY) ?: return 0
+            val metrics = DisplayMetrics()
+            display.getRealMetrics(metrics)
+            if (metrics.density <= 0f) return 0
+            (minOf(metrics.widthPixels, metrics.heightPixels) / metrics.density).toInt()
+        } catch (e: Exception) {
+            0
         }
     }
 
