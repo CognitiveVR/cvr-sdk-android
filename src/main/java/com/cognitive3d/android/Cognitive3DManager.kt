@@ -2,6 +2,7 @@ package com.cognitive3d.android
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.util.DisplayMetrics
@@ -294,6 +295,14 @@ object Cognitive3DManager {
             packageManager.hasSystemFeature("android.hardware.xr.input.eye_tracking"))
         setSessionProperty("c3d.device.feature.vr",
             packageManager.hasSystemFeature("android.hardware.vr.headtracking"))
+        setSessionProperty("c3d.device.feature.leanback",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
+        setSessionProperty("c3d.device.feature.watch",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH))
+        setSessionProperty("c3d.device.feature.automotive",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE))
+        setSessionProperty("c3d.device.feature.pc",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PC))
 
         // Capabilities
         // Deprecated: duplicate of c3d.device.model under a misleading name. Kept
