@@ -262,6 +262,10 @@ object Cognitive3DManager {
 
         // Memory (bytes)
         setSessionProperty("c3d.device.memory", getTotalMemoryBytes(context))
+        setSessionProperty(
+            "c3d.device.screen.smallestWidthInDensityIndependentPixels",
+            context.resources.configuration.smallestScreenWidthDp
+        )
 
         // GPU Info
         val gpuInfo = Util.getGpuInfo()
