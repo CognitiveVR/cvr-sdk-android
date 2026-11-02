@@ -116,11 +116,14 @@ internal object AudioRecordingManager {
         part = 1
         optedIn = config.enableAudioRecording
         warnedNoPermission = false
-        isEnabled = optedIn && hasPermission(context)
-
+        // Undeclared means it can never be granted: disable for the session so start() doesn't
+        // also log a misleading "starts once granted" warning
         if (optedIn && !declaresRecordAudio(context)) {
-            Log.w(Util.TAG, "enable_audio_recording is set but the app manifest does not declare RECORD_AUDIO — audio will not be recorded")
+            Log.w(Util.TAG, "enable_audio_recording is set but the app manifest does not declare RECORD_AUDIO — " +
+                "add <uses-permission android:name=\"android.permission.RECORD_AUDIO\" /> to the app's AndroidManifest.xml. Audio will not be recorded.")
+            optedIn = false
         }
+        isEnabled = optedIn && hasPermission(context)
 
         // Temp files left behind by a killed process hold audio that was never uploaded; drop them
         if (recording == null) {
