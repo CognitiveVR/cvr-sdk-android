@@ -1,6 +1,7 @@
 package com.cognitive3d.android
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.*
 import java.io.DataOutputStream
@@ -24,6 +25,9 @@ object NetworkManager {
     private const val MIN_RETRY_DELAY : Float = 60f
     private const val MAX_RETRY_DELAY : Float = 240f
 
+    private const val CONTENT_TYPE_JSON = "application/json"
+    private const val CONTENT_TYPE_BINARY = "application/octet-stream"
+
     private val networkScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /** Initializes the network layer with API key, cache storage, and retry settings. */
@@ -46,7 +50,6 @@ object NetworkManager {
         }
     }
 
-    /** Sends JSON content to the given URL, falling back to local cache on failure. */
     /**
      * Writes everything to the offline cache instead of the network, for sends that must finish
      * immediately (the app is crashing). The cache is uploaded on the next launch.
@@ -54,16 +57,39 @@ object NetworkManager {
     @Volatile
     var cacheOnly = false
 
+    /** Sends JSON content to the given URL, falling back to local cache on failure. */
     suspend fun send(url: String, content: String) {
+        sendWithFallback(url, content.toByteArray(Charsets.UTF_8), CONTENT_TYPE_JSON) { content }
+    }
+
+    /**
+     * Sends a binary payload (e.g. audio) to the given URL, falling back to local cache on failure.
+     * The cache is line-based text, so binary bodies are stored Base64-encoded and decoded again
+     * when replayed (see [isBinaryUrl]).
+     */
+    suspend fun sendBytes(url: String, content: ByteArray) {
+        sendWithFallback(url, content, CONTENT_TYPE_BINARY) { Base64.encodeToString(content, Base64.NO_WRAP) }
+    }
+
+    /**
+     * True while sends are failing and the offline cache can't take [bytes] more, i.e. new
+     * data of that size would be dropped rather than sent or cached.
+     */
+    fun isCacheFull(bytes: Long): Boolean = lastRequestFailed && cache?.hasRoomFor(bytes) == false
+
+    /** Binary endpoints, whose cached bodies are Base64 text rather than JSON. */
+    private fun isBinaryUrl(url: String): Boolean = url.endsWith("/audio")
+
+    private suspend fun sendWithFallback(url: String, postData: ByteArray, contentType: String, cacheBody: () -> String) {
         if (cacheOnly) {
-            cache?.writeContent(url, content)
+            cache?.writeContent(url, cacheBody())
             return
         }
         if (lastRequestFailed) {
             val currentTime = System.currentTimeMillis()
             if (currentTime < lastFailureTime + (currentRetryDelay * 1000).toLong()) {
                 Util.logDebug("Network in cooldown period ($currentRetryDelay s). Caching locally.")
-                cache?.writeContent(url, content)
+                cache?.writeContent(url, cacheBody())
                 return
             }
 
@@ -71,10 +97,10 @@ object NetworkManager {
             currentRetryDelay = getExponentialBackoff(currentRetryDelay)
         }
 
-        val code = sendRequestInternal(url, applicationKey, content)
+        val code = sendRequestInternal(url, applicationKey, postData, contentType)
         if (code == 0 || (code !in 200..299 && code != 400)) {
             Util.logWarning("Failed to send to $url (Code $code). Caching locally.")
-            cache?.writeContent(url, content)
+            cache?.writeContent(url, cacheBody())
             lastFailureTime = System.currentTimeMillis()
             lastRequestFailed = true
         } else if (code in 200..299) {
@@ -118,7 +144,17 @@ object NetworkManager {
                 val peek = c.peekContent() ?: break
                 val (url, body, _) = peek
 
-                val code = sendRequestInternal(url, applicationKey, body)
+                val code = try {
+                    if (isBinaryUrl(url)) {
+                        sendRequestInternal(url, applicationKey, Base64.decode(body, Base64.NO_WRAP), CONTENT_TYPE_BINARY)
+                    } else {
+                        sendRequestInternal(url, applicationKey, body.toByteArray(Charsets.UTF_8), CONTENT_TYPE_JSON)
+                    }
+                } catch (e: IllegalArgumentException) {
+                    // Corrupt Base64 entry: treat as a client error so it is dropped instead of blocking the cache
+                    Log.e(Util.TAG, "Dropping unreadable cached payload for $url", e)
+                    400
+                }
                 if (code in 200..299) {
                     c.popContent()
                     Util.logDebug("Successfully sent cached data to $url")
@@ -137,16 +173,15 @@ object NetworkManager {
         }
     }
 
-    private suspend fun sendRequestInternal(url: String, apiKey: String?, content: String): Int {
+    private suspend fun sendRequestInternal(url: String, apiKey: String?, postData: ByteArray, contentType: String): Int {
         return withContext(Dispatchers.IO) {
             var connection: HttpURLConnection? = null
             try {
-                val postData = content.toByteArray(charset("UTF-8"))
                 val urlObj = URL(url)
                 connection = urlObj.openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Content-Type", contentType)
                 if (apiKey != null) {
                     connection.setRequestProperty("Authorization", apiKey)
                 }
