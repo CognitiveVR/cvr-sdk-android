@@ -20,6 +20,8 @@ data class Cognitive3DConfig(
     val cacheLimit: Long = 1024 * 1024 * 100, // Default 100MB
     // Off by default for privacy; also requires RECORD_AUDIO in the app manifest
     val enableAudioRecording: Boolean = false,
+    // When false the SDK never prompts for RECORD_AUDIO; the app requests it at a time of its choosing
+    val requestAudioPermission: Boolean = true,
     val sceneSettings: List<SceneSetting> = emptyList()
 ) {
     data class SceneSetting(
@@ -64,6 +66,7 @@ data class Cognitive3DConfig(
                     automaticSendTimer = json.optInt("automatic_send_timer", 10),
                     cacheLimit = json.optLong("local_data_cache_size", 1024 * 1024 * 100),
                     enableAudioRecording = json.optBoolean("enable_audio_recording", false),
+                    requestAudioPermission = json.optBoolean("request_audio_permission", true),
                     sceneSettings = scenes
                 )
             } catch (e: Exception) {

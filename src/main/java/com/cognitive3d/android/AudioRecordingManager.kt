@@ -36,10 +36,15 @@ import java.nio.channels.Channels
  * declares RECORD_AUDIO and the user grants it. The microphone is released on pause and while
  * the device is offline with a full cache (new chunks would only be dropped).
  *
- * The SDK never requests RECORD_AUDIO itself: a permission dialog during startup interrupts
- * immersive session setup (Meta Spatial renders black until relaunch), and when startup settles
- * varies by headset. The app should request it when convenient; the permission is re-checked on every
- * [start], so a grant made mid-session takes effect on the next resume.
+ * By default the SDK requests RECORD_AUDIO with its other optional permissions at startup
+ * (see [getOptionalPermissions]). Apps that want to control when the prompt appears (e.g. after
+ * their own consent screen) set `request_audio_permission: false` and request it themselves.
+ * Either way the permission is re-checked on every [start], so a grant made mid-session takes
+ * effect on the next resume.
+ *
+ * Note: on Meta Spatial, any runtime permission dialog during the immersive session leaves the
+ * app rendering black until relaunch, whoever requests it. This is a platform issue, reproduced
+ * without the SDK.
  */
 internal object AudioRecordingManager {
     private const val CHANNEL = "user"
@@ -91,6 +96,18 @@ internal object AudioRecordingManager {
     private val chunkMutex = Mutex()
     private var part = 1
 
+    /**
+     * Returns RECORD_AUDIO if the app opted into audio recording, lets the SDK request it, and
+     * declares the permission in its manifest. The SDK manifest intentionally does not declare it,
+     * so apps that don't use this feature never gain microphone access by merging the SDK.
+     */
+    fun getOptionalPermissions(context: Context): Array<String> {
+        val config = Cognitive3DConfig.fromAssets(context) ?: return emptyArray()
+        if (!config.enableAudioRecording || !config.requestAudioPermission) return emptyArray()
+        if (!declaresRecordAudio(context)) return emptyArray() // init() logs the warning
+        return arrayOf(Manifest.permission.RECORD_AUDIO)
+    }
+
     /** Prepares a new session. Recording starts on [start]. */
     fun init(context: Context, config: Cognitive3DConfig) {
         appContext = context.applicationContext
@@ -122,7 +139,7 @@ internal object AudioRecordingManager {
         if (!hasPermission(context)) {
             if (!warnedNoPermission) {
                 warnedNoPermission = true
-                Util.logWarning("Audio recording enabled but RECORD_AUDIO not granted — the app must request it; recording starts on the next resume after it is granted")
+                Util.logWarning("Audio recording enabled but RECORD_AUDIO not granted — recording starts on the next resume after it is granted")
             }
             return
         }
