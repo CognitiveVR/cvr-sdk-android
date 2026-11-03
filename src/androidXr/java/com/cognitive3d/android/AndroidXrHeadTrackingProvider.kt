@@ -74,28 +74,29 @@ class AndroidXrHeadTrackingProvider(
         return arDevice
     }
 
-    /** Returns the raw device/HMD pose only */
-    override fun getHeadPose(): PoseData {
-        val device = ensureDevice() ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
+    /** Returns the raw device/HMD pose only, or null while device tracking is unavailable */
+    override fun getHeadPose(): PoseData? {
+        val device = ensureDevice() ?: return null
         return try {
             device.state.value.devicePose.toPoseDataFromPerception(session)
         } catch (e: Exception) {
             Log.w(Util.TAG, "Failed to read head pose", e)
-            PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
+            null
         }
     }
 
     /**
      * Returns the gaze ray: position from device, rotation from averaged eye gaze.
      * Falls back to device-only pose if eye tracking is unavailable.
+     * Returns null while device tracking is unavailable.
      */
-    override fun getGazeRay(): GazeRayData {
-        val device = ensureDevice() ?: return GazeRayData(0f, 0f, 0f, 0f, 0f, -1f)
+    override fun getGazeRay(): GazeRayData? {
+        val device = ensureDevice() ?: return null
         return try {
             getEyeGaze(device) ?: device.state.value.devicePose.toGazeRayFromPerception(session)
         } catch (e: Exception) {
             Log.w(Util.TAG, "Failed to read gaze ray", e)
-            GazeRayData(0f, 0f, 0f, 0f, 0f, -1f)
+            null
         }
     }
 

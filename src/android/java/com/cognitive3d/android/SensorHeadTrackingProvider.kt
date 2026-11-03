@@ -68,14 +68,15 @@ class SensorHeadTrackingProvider(activity: Activity) : HeadTrackingProvider, Sen
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
 
-    override fun getHeadPose(): PoseData {
-        val m = currentRotation() ?: return PoseData(0f, 0f, 0f, 0f, 0f, 0f, 1f)
+    /** Returns null until the first sensor sample arrives (or if the device has no rotation sensor). */
+    override fun getHeadPose(): PoseData? {
+        val m = currentRotation() ?: return null
         val q = matrixToQuaternion(m)
         return PoseData(0f, 0f, 0f, q[0], q[1], q[2], q[3])
     }
 
-    override fun getGazeRay(): GazeRayData {
-        val m = currentRotation() ?: return GazeRayData(0f, 0f, 0f, 0f, 0f, 1f)
+    override fun getGazeRay(): GazeRayData? {
+        val m = currentRotation() ?: return null
         // Forward is the rotated +Z axis, i.e. the third column
         return GazeRayData(0f, 0f, 0f, m[2], m[5], m[8])
     }
