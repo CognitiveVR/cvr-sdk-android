@@ -55,6 +55,7 @@ object Cognitive3DManager {
         ExitReporter.onSessionStart(appContext, scope)
         CrashReporter.install()
         CrashReporter.sessionActive = true
+        AudioRecordingManager.init(appContext, loadedConfig)
         startSession(appContext, provider)
     }
 
@@ -67,6 +68,7 @@ object Cognitive3DManager {
         Log.d(Util.TAG, "Cognitive3D Session Started")
 
         startSensorProcessor()
+        AudioRecordingManager.start(scope)
 
         scope.launch {
             setInternalSessionProperties(context, provider)
@@ -123,6 +125,7 @@ object Cognitive3DManager {
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
         DeviceMonitor.stop()
+        AudioRecordingManager.stop(scope)
         stopFlushTimer()
 
         scope.launch {
@@ -152,6 +155,7 @@ object Cognitive3DManager {
             DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
             PerformanceMonitor.startMonitoring(scope)
             DeviceMonitor.start(scope)
+            AudioRecordingManager.start(scope)
             startSensorProcessor()
             startFlushTimer()
         } catch (e: Exception) {
@@ -174,6 +178,7 @@ object Cognitive3DManager {
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
         DeviceMonitor.stop()
+        AudioRecordingManager.stop(scope)
         stopFlushTimer()
 
         val endTime = System.currentTimeMillis().toDouble() / 1000.0
@@ -312,6 +317,9 @@ object Cognitive3DManager {
         setSessionProperty("c3d.device.eyetracking.enabled", provider.isEyeTrackingAvailable())
         setSessionProperty("c3d.device.controllerinputs.enabled", detectControllerInputs(provider))
         setSessionProperty("c3d.app.handtracking.enabled", provider.isHandTrackingAvailable())
+        if (config?.enableAudioRecording == true) {
+            setSessionProperty("c3d.device.audio_tracking.enabled", AudioRecordingManager.isEnabled)
+        }
     }
 
     /**
