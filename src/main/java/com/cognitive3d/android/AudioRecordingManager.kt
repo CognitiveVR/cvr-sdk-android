@@ -3,8 +3,6 @@ package com.cognitive3d.android
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioManager
-import android.media.AudioRecordingConfiguration
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
@@ -63,7 +61,6 @@ internal object AudioRecordingManager {
     private class Recording(
         val recorder: MediaRecorder,
         val file: File,
-        val silenceCallback: AudioManager.AudioRecordingCallback,
         startMs: Long
     ) {
         var readPosition = 0L
@@ -89,8 +86,6 @@ internal object AudioRecordingManager {
     private var recording: Recording? = null
     private var pausedForCache = false
     private var chunkJob: Job? = null
-    @Volatile
-    private var isSilenced = false
 
     // Serializes chunk reads/sends so part numbers go out in order across pause/resume
     private val chunkMutex = Mutex()
@@ -220,12 +215,7 @@ internal object AudioRecordingManager {
                 start()
             }
 
-            val silenceCallback = createSilenceCallback()
-            recorder.registerAudioRecordingCallback(Runnable::run, silenceCallback)
-            // The callback only fires on changes, so check whether capture started out silenced
-            recorder.activeRecordingConfiguration?.let { updateSilenced(it.isClientSilenced) }
-
-            recording = Recording(recorder, file, silenceCallback, System.currentTimeMillis())
+            recording = Recording(recorder, file, System.currentTimeMillis())
             Util.logDebug("Audio recording started")
         } catch (e: Exception) {
             Log.e(Util.TAG, "Failed to start audio recording", e)
@@ -238,7 +228,6 @@ internal object AudioRecordingManager {
         val rec = synchronized(this) {
             val current = recording ?: return
             recording = null
-            current.recorder.unregisterAudioRecordingCallback(current.silenceCallback)
             try {
                 current.recorder.stop()
             } catch (e: RuntimeException) {
@@ -311,23 +300,6 @@ internal object AudioRecordingManager {
             SerializePacked.writeToUnbuffered(Channels.newChannel(out), message)
             return out.toByteArray()
         }
-    }
-
-    /**
-     * Reports when the system silences our capture, e.g. because another app holds the
-     * microphone with priority (RealWear's WearHF speech service listens continuously).
-     */
-    private fun createSilenceCallback() = object : AudioManager.AudioRecordingCallback() {
-        override fun onRecordingConfigChanged(configs: List<AudioRecordingConfiguration>) {
-            updateSilenced(configs.any { it.isClientSilenced })
-        }
-    }
-
-    private fun updateSilenced(silenced: Boolean) {
-        if (silenced == isSilenced) return
-        isSilenced = silenced
-        if (silenced) Util.logWarning("Microphone capture silenced by the system")
-        Cognitive3DManager.sendCustomEvent("c3d.audio.silenced", mapOf("issilenced" to silenced))
     }
 
     private fun createRecorder(context: Context): MediaRecorder {
