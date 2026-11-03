@@ -12,12 +12,16 @@ interface HeadTrackingProvider {
     /** Releases tracking resources. */
     fun stop()
 
-    /** Returns the raw device/HMD pose (position + rotation). No eye data mixed in. */
-    fun getHeadPose(): PoseData
+    /**
+     * Returns the raw device/HMD pose (position + rotation). No eye data mixed in.
+     * Returns null while tracking is unavailable, never a placeholder pose.
+     */
+    fun getHeadPose(): PoseData?
 
     /**
      * Returns the gaze ray as origin (position) + forward direction (stored in rotation fields).
      * Uses eye tracking when available, otherwise falls back to HMD forward.
+     * Returns null while tracking is unavailable, never a placeholder ray.
      */
-    fun getGazeRay(): GazeRayData
+    fun getGazeRay(): GazeRayData?
 }
