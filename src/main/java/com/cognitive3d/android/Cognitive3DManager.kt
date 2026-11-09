@@ -350,10 +350,7 @@ object Cognitive3DManager {
         return try {
             val mode = context.getSystemService(DisplayManager::class.java)
                 ?.getDisplay(Display.DEFAULT_DISPLAY)?.mode ?: return 0
-            val shortSidePixels = minOf(mode.physicalWidth, mode.physicalHeight)
-            val stableDensityDpi = DisplayMetrics.DENSITY_DEVICE_STABLE
-            if (shortSidePixels <= 0 || stableDensityDpi <= 0) return 0
-            shortSidePixels * 160 / stableDensityDpi
+            smallestWidthDp(mode.physicalWidth, mode.physicalHeight, DisplayMetrics.DENSITY_DEVICE_STABLE)
         } catch (e: Exception) {
             0
         }
