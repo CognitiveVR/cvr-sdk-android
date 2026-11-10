@@ -9,9 +9,9 @@ Android XR analytics SDK. Three product flavors share `src/main`:
 
 ## Build & verify
 
-- Requires JDK 17 (AGP 8.4). Newer JDKs fail with a cryptic error whose message is just the Java version string.
+- Requires JDK 17 (AGP 8.11). Newer JDKs fail with a cryptic error whose message is just the Java version string.
 - `./gradlew compileAndroidXrDebugKotlin compileMetaSpatialDebugKotlin compileAndroidDebugKotlin` — fast compile check. Verify ALL flavors for any code change: they share `src/main`, so one flavor compiling says nothing about the others. (Docs-only changes don't need a build.)
-- No test infrastructure exists yet (planned: C3D-2035); compilation plus on-device runs are the only verification.
+- `./gradlew testAndroidDebugUnitTest testAndroidXrDebugUnitTest testMetaSpatialDebugUnitTest` — JVM unit tests (JUnit 4, `src/test/java`), one task per flavor. They cover pure JVM logic only: no Android framework classes (they throw "Method not mocked"), no Robolectric, no mocking library. Put testable arithmetic in functions that take plain types. Check `build/test-results/` for the executed test counts, since a green run with zero tests is not a pass. Everything else still needs compilation plus on-device runs.
 
 ## Architecture constraints
 
