@@ -28,6 +28,7 @@ class Cognitive3DInitializer : ContentProvider() {
                 private var sessionInitialized = false
                 private var permissionsRequested = false
                 private var platformProvider: PlatformProvider? = null
+                private var audioPermissions: Array<String>? = null
 
                 override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
 
@@ -41,7 +42,7 @@ class Cognitive3DInitializer : ContentProvider() {
                     if (!sessionInitialized) {
                         val provider = getOrCreateProvider(activity)
                         val missingRequired = missingPermissions(activity, provider.getRequiredPermissions())
-                        val missingOptional = missingPermissions(activity, provider.getOptionalPermissions())
+                        val missingOptional = missingPermissions(activity, provider.getOptionalPermissions() + getAudioPermissions(activity))
                         if ((missingRequired.isNotEmpty() || missingOptional.isNotEmpty()) && !permissionsRequested) {
                             // Ask at most once per process (re-requesting on every resume
                             // traps the user in a prompt loop on denial), and ask even when
@@ -88,6 +89,12 @@ class Cognitive3DInitializer : ContentProvider() {
 
                 private fun getOrCreateProvider(activity: Activity): PlatformProvider {
                     return platformProvider ?: PlatformFactory.create(activity).also { platformProvider = it }
+                }
+
+                // Platform-independent, so requested here rather than via PlatformProvider.
+                // Cached: it reads cognitive3d.json, and this runs on every pre-init resume.
+                private fun getAudioPermissions(activity: Activity): Array<String> {
+                    return audioPermissions ?: AudioRecordingManager.getOptionalPermissions(activity).also { audioPermissions = it }
                 }
 
                 private fun missingPermissions(context: Context, permissions: Array<String>): List<String> {
