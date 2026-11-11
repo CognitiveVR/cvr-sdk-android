@@ -23,6 +23,9 @@ object Cognitive3DManager {
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
     private var platformProvider: PlatformProvider? = null
+    // Warn once per process, not per call, when Dynamic Objects are registered on a flavor without them
+    @Volatile
+    private var dynamicObjectsUnsupportedWarned = false
 
     // Channel for high-frequency sensor data - Nullable to manage lifecycle safely
     @Volatile
@@ -482,6 +485,16 @@ object Cognitive3DManager {
         trackable: Any? = null,
         id: String? = null
     ) {
+        // Checked per flavor via PlatformFactory, not the PlatformProvider: apps often register
+        // before the session (and so the provider) exists
+        if (!PlatformFactory.supportsDynamicObjects) {
+            if (!dynamicObjectsUnsupportedWarned) {
+                dynamicObjectsUnsupportedWarned = true
+                Log.w(Util.TAG, "Dynamic Objects aren't supported by this SDK build; '$name' and any later registrations are ignored. Use android-xr-sdk or meta-spatial-sdk for immersive apps.")
+            }
+            return
+        }
+
         for (obj in DynamicManager.dynamics) {
             if (obj.trackableRef != null && obj.trackableRef == trackable) {
                 Log.w(Util.TAG, "Dynamic Object Already Registered: $trackable")
