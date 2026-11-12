@@ -26,6 +26,8 @@ internal object CrashReporter {
     var sessionActive = false
 
     /** Installs the handler once per process; later sessions reuse it. */
+    // Broad catch on purpose, see "Error handling" in Util.kt
+    @Suppress("TooGenericExceptionCaught")
     @Synchronized
     fun install() {
         if (installed) return

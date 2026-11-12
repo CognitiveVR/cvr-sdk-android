@@ -192,6 +192,8 @@ internal object AudioRecordingManager {
         }
     }
 
+    // Broad catch on purpose, see "Error handling" in Util.kt
+    @Suppress("TooGenericExceptionCaught")
     @Synchronized
     private fun startCapture() {
         if (!active || recording != null) return
@@ -224,6 +226,8 @@ internal object AudioRecordingManager {
         }
     }
 
+    // Broad catch on purpose, see "Error handling" in Util.kt
+    @Suppress("TooGenericExceptionCaught")
     private fun stopCapture(scope: CoroutineScope) {
         val rec = synchronized(this) {
             val current = recording ?: return

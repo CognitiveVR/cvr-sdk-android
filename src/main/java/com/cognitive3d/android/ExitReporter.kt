@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Process
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -34,6 +35,8 @@ internal object ExitReporter {
      * Sends the exit reason of the previous session if it didn't end cleanly, then saves the
      * current session in its place. Call after Serialization.init so the current session exists.
      */
+    // Broad catch on purpose, see "Error handling" in Util.kt
+    @Suppress("TooGenericExceptionCaught")
     fun onSessionStart(context: Context, scope: CoroutineScope) {
         appContext = context.applicationContext
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -44,6 +47,8 @@ internal object ExitReporter {
             scope.launch {
                 try {
                     reportExit(context, previous, previousPid)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(Util.TAG, "Failed to report previous session exit", e)
                 }

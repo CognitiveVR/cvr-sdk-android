@@ -8,7 +8,15 @@ import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.opengles.GL10
 import androidx.core.content.edit
 
-/** Shared constants, logging helpers, and utility functions used across the SDK. */
+/**
+ * Shared constants, logging helpers, and utility functions used across the SDK.
+ *
+ * Error handling: the SDK must never crash the host app. Where a failure can come from the
+ * platform in many forms (MediaRecorder reports failures as plain RuntimeException, system
+ * services throw various runtime types, the crash handler must survive anything), we catch
+ * broadly on purpose and mark it with @Suppress("TooGenericExceptionCaught"). Inside coroutines,
+ * rethrow CancellationException first so the scope can still cancel the work.
+ */
 object Util {
     const val TAG : String = "Cognitive3D"
     const val SNAPSHOTINTERVAL : Float = 0.1f

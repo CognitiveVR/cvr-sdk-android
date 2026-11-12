@@ -66,6 +66,8 @@ object DeviceMonitor {
     }
 
     /** Starts sampling every [SAMPLE_INTERVAL_MS]. Safe to call again after [stop]. */
+    // Broad catch on purpose, see "Error handling" in Util.kt
+    @Suppress("TooGenericExceptionCaught")
     fun start(scope: CoroutineScope) {
         val context = appContext ?: return
         if (monitorJob != null) return
