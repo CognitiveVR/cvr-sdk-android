@@ -122,6 +122,7 @@ object Cognitive3DManager {
     @JvmStatic
     fun pauseSession() {
         Log.d(Util.TAG, "Cognitive3D Session Paused")
+        ExitReporter.onSessionPaused()
 
         // Stop recording loops
         GazeManager.stopGazeRecording()
@@ -147,6 +148,7 @@ object Cognitive3DManager {
     @JvmStatic
     fun resumeSession() {
         Log.d(Util.TAG, "Cognitive3D Session Resumed")
+        ExitReporter.onSessionResumed()
 
         val provider = platformProvider ?: return
 
