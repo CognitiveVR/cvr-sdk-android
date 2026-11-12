@@ -110,12 +110,26 @@ fun getProperty(key: String, default: String = ""): String {
 
 // Determine which flavor to publish (pass -PFLAVOR=androidXr, -PFLAVOR=metaSpatial or -PFLAVOR=android)
 val flavorToBuild = providers.gradleProperty("FLAVOR").getOrElse("androidXr")
+require(flavorToBuild in listOf("androidXr", "metaSpatial", "android")) {
+    "Unknown FLAVOR '$flavorToBuild'. Use androidXr, metaSpatial or android."
+}
 
 mavenPublishing {
     val artifactId = when (flavorToBuild) {
         "metaSpatial" -> "meta-spatial-sdk"
         "androidXr" -> "android-xr-sdk"
         else -> "android-sdk"
+    }
+    // Name and description shown on Maven Central for this flavor
+    val pomName = when (flavorToBuild) {
+        "metaSpatial" -> "Cognitive3D Meta Spatial SDK"
+        "androidXr" -> "Cognitive3D Android XR SDK"
+        else -> "Cognitive3D Android SDK"
+    }
+    val pomDescription = when (flavorToBuild) {
+        "metaSpatial" -> "Analytics and insights SDK for Meta Spatial SDK applications on Meta Quest"
+        "androidXr" -> "Analytics and insights SDK for Android XR applications"
+        else -> "Analytics and insights SDK for Android phone and tablet applications"
     }
 
     coordinates(
@@ -131,8 +145,8 @@ mavenPublishing {
     ))
 
     pom {
-        name.set(getProperty("POM_NAME"))
-        description.set(getProperty("POM_DESCRIPTION"))
+        name.set(pomName)
+        description.set(pomDescription)
         inceptionYear.set(getProperty("POM_INCEPTION_YEAR"))
         url.set(getProperty("POM_URL"))
 
