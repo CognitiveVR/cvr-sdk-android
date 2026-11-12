@@ -28,6 +28,7 @@ internal object ExitReporter {
     private const val KEY_EVENT_URL = "eventUrl"
     private const val KEY_GAZE_URL = "gazeUrl"
     private const val KEY_PID = "pid"
+    private const val KEY_PAUSED_AT_MILLISECONDS = "pausedAtMilliseconds"
 
     private var appContext: Context? = null
 
@@ -43,10 +44,11 @@ internal object ExitReporter {
 
         val previous = readRecord(context)
         val previousPid = prefs.getInt(KEY_PID, 0)
+        val previousPausedAtMilliseconds = prefs.getLong(KEY_PAUSED_AT_MILLISECONDS, 0L)
         if (previous != null) {
             scope.launch {
                 try {
-                    reportExit(context, previous, previousPid)
+                    reportExit(context, previous, previousPid, previousPausedAtMilliseconds)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -63,6 +65,7 @@ internal object ExitReporter {
             .putString(KEY_EVENT_URL, current.eventUrl)
             .putString(KEY_GAZE_URL, current.gazeUrl)
             .putInt(KEY_PID, Process.myPid())
+            .remove(KEY_PAUSED_AT_MILLISECONDS)
             .commit()
     }
 
@@ -72,7 +75,22 @@ internal object ExitReporter {
         appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.clear()?.commit()
     }
 
-    private suspend fun reportExit(context: Context, session: Serialization.SessionRecord, pid: Int) {
+    /** Records when the session was paused, so a later process death is not taken as the session end. */
+    fun onSessionPaused() {
+        appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()
+            ?.putLong(KEY_PAUSED_AT_MILLISECONDS, System.currentTimeMillis())?.apply()
+    }
+
+    fun onSessionResumed() {
+        appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(KEY_PAUSED_AT_MILLISECONDS)?.apply()
+    }
+
+    private suspend fun reportExit(
+        context: Context,
+        session: Serialization.SessionRecord,
+        pid: Int,
+        pausedAtMilliseconds: Long
+    ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
 
@@ -84,7 +102,7 @@ internal object ExitReporter {
         }
 
         val reason = getExitReason(exitInfo.reason)
-        val exitTime = exitInfo.timestamp / 1000.0
+        val exitTime = (if (pausedAtMilliseconds > 0) pausedAtMilliseconds else exitInfo.timestamp) / 1000.0
         Log.d(Util.TAG, "Previous session ${session.sessionId} ended without closing: $reason")
 
         if (exitInfo.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
