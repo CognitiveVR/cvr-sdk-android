@@ -61,7 +61,7 @@ object DynamicManager {
         val provider = controllerProvider ?: return
         val currentTime = System.currentTimeMillis().toDouble() / 1000.0
 
-        // Detect input type from either side — both sides share the same type
+        // Detect input type from either side: both sides share the same type
         val activeType = provider.getActiveControllerType(false)
             .takeIf { it != ControllerType.NONE }
             ?: provider.getActiveControllerType(true)

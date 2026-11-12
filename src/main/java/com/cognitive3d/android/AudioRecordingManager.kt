@@ -114,7 +114,7 @@ internal object AudioRecordingManager {
         // Undeclared means it can never be granted: disable for the session so start() doesn't
         // also log a misleading "starts once granted" warning
         if (optedIn && !declaresRecordAudio(context)) {
-            Log.w(Util.TAG, "enable_audio_recording is set but the app manifest does not declare RECORD_AUDIO — " +
+            Log.w(Util.TAG, "enable_audio_recording is set but the app manifest does not declare RECORD_AUDIO; " +
                 "add <uses-permission android:name=\"android.permission.RECORD_AUDIO\" /> to the app's AndroidManifest.xml. Audio will not be recorded.")
             optedIn = false
         }
@@ -137,7 +137,7 @@ internal object AudioRecordingManager {
         if (!hasPermission(context)) {
             if (!warnedNoPermission) {
                 warnedNoPermission = true
-                Util.logWarning("Audio recording enabled but RECORD_AUDIO not granted — recording starts on the next resume after it is granted")
+                Util.logWarning("Audio recording enabled but RECORD_AUDIO not granted; recording starts on the next resume after it is granted")
             }
             return
         }
@@ -181,11 +181,11 @@ internal object AudioRecordingManager {
         synchronized(this) {
             if (!active) return
             if (full && recording != null) {
-                Util.logWarning("Offline cache is full — pausing audio recording until there is room")
+                Util.logWarning("Offline cache is full; pausing audio recording until there is room")
                 pausedForCache = true
                 stopCapture(scope)
             } else if (!full && pausedForCache) {
-                Util.logInfo("Offline cache has room — resuming audio recording")
+                Util.logInfo("Offline cache has room; resuming audio recording")
                 pausedForCache = false
                 startCapture()
             }

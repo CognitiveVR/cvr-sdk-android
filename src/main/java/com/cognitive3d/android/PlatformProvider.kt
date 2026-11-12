@@ -25,6 +25,11 @@ interface PlatformProvider {
     fun isEyeTrackingAvailable(): Boolean = false
     /** Returns true if hand tracking is available on this device at runtime. Only valid after initialize(). */
     fun isHandTrackingAvailable(): Boolean = false
+    /**
+     * Returns true if tracking depends on the activity passed to [initialize] (e.g. its XR session
+     * or scene), so the session must end when that activity is destroyed even if others remain.
+     */
+    fun isBoundToHostActivity(): Boolean = true
     /** Releases platform-specific resources. */
     fun destroy()
 }

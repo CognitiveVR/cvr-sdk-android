@@ -6,11 +6,10 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Build
+import android.hardware.display.DisplayManager
 import android.util.Log
 import android.view.Display
 import android.view.Surface
-import android.view.WindowManager
 import kotlinx.coroutines.CoroutineScope
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -47,7 +46,7 @@ class SensorHeadTrackingProvider(activity: Activity) : HeadTrackingProvider, Sen
     override fun start(scope: CoroutineScope) {
         if (registered) return
         if (sensor == null) {
-            Util.logWarning("No rotation vector sensor on this device — head orientation will not be recorded")
+            Util.logWarning("No rotation vector sensor on this device; head orientation will not be recorded")
             return
         }
         yawReference = null
@@ -143,13 +142,11 @@ class SensorHeadTrackingProvider(activity: Activity) : HeadTrackingProvider, Sen
         }
     }
 
+    // The built-in display via the app context, not the activity's: the session can outlive the
+    // activity it started in, and holding that activity's Display would keep it alive
     private fun getDisplay(activity: Activity): Display? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            activity.display
-        } else {
-            @Suppress("DEPRECATION")
-            (activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
-        }
+        val displayManager = activity.applicationContext.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        return displayManager?.getDisplay(Display.DEFAULT_DISPLAY)
     }
 
     companion object {

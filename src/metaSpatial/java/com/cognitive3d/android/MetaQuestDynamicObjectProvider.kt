@@ -110,7 +110,7 @@ class MetaQuestDynamicObjectProvider(
             val soX = loX * isx;  val soY = loY * isy;  val soZ = loZ * isz
             val sdX = ldX * isx;  val sdY = ldY * isy;  val sdZ = ldZ * isz
 
-            // Intersect with raw (unscaled) bbox — only accept front-face hits (tMin >= 0)
+            // Intersect with raw (unscaled) bbox; only accept front-face hits (tMin >= 0)
             val tScaled = Util.rayAABBIntersect(
                 soX, soY, soZ,
                 sdX, sdY, sdZ,

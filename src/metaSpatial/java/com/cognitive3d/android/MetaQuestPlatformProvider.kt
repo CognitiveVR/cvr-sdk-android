@@ -51,7 +51,7 @@ class MetaQuestPlatformProvider : PlatformProvider {
     // "oculus.software.*" are the feature strings Meta documents for manifest
     // <uses-feature> declarations (eye tracking: Quest Pro only, hand tracking:
     // all current Quests). Whether Quest OS reports them via hasSystemFeature is
-    // unverified on hardware — check `adb shell pm list features` before release.
+    // unverified on hardware. Check `adb shell pm list features` before release.
     override fun isEyeTrackingAvailable(): Boolean =
         appContext?.packageManager?.hasSystemFeature("oculus.software.eye_tracking") ?: false
 

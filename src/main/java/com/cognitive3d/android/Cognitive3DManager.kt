@@ -232,7 +232,7 @@ object Cognitive3DManager {
     /**
      * Gathers and sets hardware and application metadata for the session.
      *
-     * Sends raw device signals only — classification (device type, category,
+     * Sends raw device signals only. Classification (device type, category,
      * family) is computed downstream by the pipeline's Device Resolution
      * Service, so no pre-classified values may be added here (C3D-1737).
      */
@@ -257,7 +257,7 @@ object Cognitive3DManager {
         setSessionProperty("c3d.app.name", appName)
 
         // Device ID & raw identity signals
-        // Note: c3d.device.type is intentionally not sent — the pipeline derives it.
+        // Note: c3d.device.type is intentionally not sent; the pipeline derives it.
         setSessionProperty("c3d.deviceid", Serialization.userID)
         setSessionProperty("c3d.device.model", Build.MODEL ?: "Unknown")
         setSessionProperty("c3d.device.product", Build.PRODUCT ?: "Unknown")

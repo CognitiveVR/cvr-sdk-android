@@ -28,6 +28,10 @@ class AndroidPlatformProvider : PlatformProvider {
 
     override fun getDynamicObjectProvider(): DynamicObjectProvider = dynamicObjectProvider
 
+    // Only the rotation sensor and default display are used, both app-wide, so the session
+    // can outlive the activity it started in (multi-activity phone and tablet apps)
+    override fun isBoundToHostActivity(): Boolean = false
+
     override fun destroy() {
         headTrackingProvider?.stop()
         headTrackingProvider = null
