@@ -456,21 +456,26 @@ object Serialization {
     fun currentSessionRecord() = SessionRecord(sessionID, userID, sessionTimestamp, eventURL, gazeURL)
 
     /**
-     * Sends one event for an earlier session, e.g. its end reported at the next launch.
-     * Uses a high part number so it can't collide with the parts that session already sent.
+     * Sends events (name to properties) for an earlier session in one payload, e.g. its end at
+     * the next launch. Uses a high part number that can't collide with parts already sent.
      */
-    suspend fun sendPastSessionEvent(record: SessionRecord, category: String, properties: Map<String, Any?>, eventTime: Double) {
+    suspend fun sendPastSessionEvents(record: SessionRecord, events: List<Pair<String, Map<String, Any?>>>, eventTime: Double) {
         val payload = StringBuilder(512).apply {
-            append("{\"data\":[{")
-            appendKeyValue("name", category)
-            appendKeyValue("time", eventTime)
-            append("\"point\":[0,0,0]")
-            if (properties.isNotEmpty()) {
-                append(",\"properties\":{")
-                appendProperties(properties)
+            append("{\"data\":[")
+            events.forEachIndexed { index, (category, properties) ->
+                if (index > 0) append(',')
+                append('{')
+                appendKeyValue("name", category)
+                appendKeyValue("time", eventTime)
+                append("\"point\":[0,0,0]")
+                if (properties.isNotEmpty()) {
+                    append(",\"properties\":{")
+                    appendProperties(properties)
+                    append('}')
+                }
                 append('}')
             }
-            append("}],")
+            append("],")
             appendKeyValue("userid", record.userId)
             appendKeyValue("timestamp", record.sessionTimestamp.toLong())
             appendKeyValue("sessionid", record.sessionId)
@@ -480,7 +485,7 @@ object Serialization {
         NetworkManager.send(record.eventUrl, payload)
     }
 
-    /** Sets session properties (e.g. tags) on an earlier session. See [sendPastSessionEvent]. */
+    /** Sets session properties (e.g. tags) on an earlier session. See [sendPastSessionEvents]. */
     suspend fun sendPastSessionProperties(record: SessionRecord, properties: Map<String, Any?>) {
         val payload = StringBuilder(256).apply {
             append("{\"data\":[],")

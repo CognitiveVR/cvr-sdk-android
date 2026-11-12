@@ -87,19 +87,21 @@ internal object ExitReporter {
         val exitTime = exitInfo.timestamp / 1000.0
         Log.d(Util.TAG, "Previous session ${session.sessionId} ended without closing: $reason")
 
+        val events = mutableListOf<Pair<String, Map<String, Any?>>>()
         if (exitInfo.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
-            Serialization.sendPastSessionEvent(session, "c3d.event.app_crashed", mapOf(
+            events.add("c3d.event.app_crashed" to mapOf(
                 "Reason" to reason,
                 "Description" to (exitInfo.description ?: "")
-            ), exitTime)
+            ))
             Serialization.sendPastSessionProperties(session, mapOf("c3d.session_tag.Crash" to true))
         }
 
-        Serialization.sendPastSessionEvent(session, "c3d.sessionEnd", mapOf(
+        events.add("c3d.sessionEnd" to mapOf(
             "sessionlength" to exitTime - session.sessionTimestamp,
             "ExitCode" to exitInfo.reason.toString(),
             "Reason" to reason
-        ), exitTime)
+        ))
+        Serialization.sendPastSessionEvents(session, events, exitTime)
     }
 
     private fun readRecord(context: Context): Serialization.SessionRecord? {
