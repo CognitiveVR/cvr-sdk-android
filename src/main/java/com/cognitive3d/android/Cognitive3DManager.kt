@@ -23,6 +23,11 @@ object Cognitive3DManager {
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
     private var platformProvider: PlatformProvider? = null
+
+    // Counts pauses and resumes, so a pause whose background work finishes after a resume
+    // doesn't save a stale pause time (see pauseSession)
+    private val pauseLock = Any()
+    private var pauseGeneration = 0
     // Warn once per process, not per call, when Dynamic Objects are registered on a flavor without them
     @Volatile
     private var dynamicObjectsUnsupportedWarned = false
@@ -122,7 +127,7 @@ object Cognitive3DManager {
     @JvmStatic
     fun pauseSession() {
         Log.d(Util.TAG, "Cognitive3D Session Paused")
-        ExitReporter.onSessionPaused()
+        val pause = synchronized(pauseLock) { ++pauseGeneration }
 
         // Stop recording loops
         GazeManager.stopGazeRecording()
@@ -134,6 +139,11 @@ object Cognitive3DManager {
 
         scope.launch {
             Serialization.serializeCustomEvents("c3d.pause", mapOf("ispaused" to true))
+            // Saved after the pause event, so a session ended at this pause never ends before it.
+            // Skipped if the session already resumed while this was waiting to run.
+            synchronized(pauseLock) {
+                if (pause == pauseGeneration) ExitReporter.onSessionPaused()
+            }
             // Record current state of dynamic objects before flushing
             DynamicManager.recordFinalDynamics()
             // Flush all pending data buffers immediately
@@ -148,7 +158,10 @@ object Cognitive3DManager {
     @JvmStatic
     fun resumeSession() {
         Log.d(Util.TAG, "Cognitive3D Session Resumed")
-        ExitReporter.onSessionResumed()
+        synchronized(pauseLock) {
+            pauseGeneration++
+            ExitReporter.onSessionResumed()
+        }
 
         val provider = platformProvider ?: return
 
