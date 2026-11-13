@@ -58,7 +58,7 @@ class AndroidXrPlatformProvider(private val activity: Activity) : PlatformProvid
      * dropping hand tracking: the two eye permissions can be granted or denied
      * independently, and tryConfigure treats both permission denial and hardware
      * unsupport as a tier failure, so the accepted tier reflects what is actually
-     * usable — not an all-or-nothing default.
+     * usable, not an all-or-nothing default.
      */
     private fun configureSession(session: Session): SessionConfigureResult? {
         val eyeModes = listOf(

@@ -2,8 +2,12 @@ package com.cognitive3d.android
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.hardware.display.DisplayManager
 import android.os.Build
+import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Display
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +23,14 @@ object Cognitive3DManager {
     private var flushTimerJob: Job? = null
     private var config: Cognitive3DConfig? = null
     private var platformProvider: PlatformProvider? = null
+
+    // Counts pauses and resumes, so a pause whose background work finishes after a resume
+    // doesn't save a stale pause time (see pauseSession)
+    private val pauseLock = Any()
+    private var pauseGeneration = 0
+    // Warn once per process, not per call, when Dynamic Objects are registered on a flavor without them
+    @Volatile
+    private var dynamicObjectsUnsupportedWarned = false
 
     // Channel for high-frequency sensor data - Nullable to manage lifecycle safely
     @Volatile
@@ -47,6 +59,11 @@ object Cognitive3DManager {
         config = loadedConfig
         platformProvider = provider
         Serialization.init(appContext, loadedConfig)
+        DeviceMonitor.init(appContext)
+        ExitReporter.onSessionStart(appContext, scope)
+        CrashReporter.install()
+        CrashReporter.sessionActive = true
+        AudioRecordingManager.init(appContext, loadedConfig)
         startSession(appContext, provider)
     }
 
@@ -59,6 +76,7 @@ object Cognitive3DManager {
         Log.d(Util.TAG, "Cognitive3D Session Started")
 
         startSensorProcessor()
+        AudioRecordingManager.start(scope)
 
         scope.launch {
             setInternalSessionProperties(context, provider)
@@ -76,6 +94,7 @@ object Cognitive3DManager {
                 GazeManager.startGazeRecording(scope, headProvider, dynamicObjectProvider)
                 DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
                 PerformanceMonitor.startMonitoring(scope)
+                DeviceMonitor.start(scope)
                 startFlushTimer()
             } catch (e: Exception) {
                 Log.e(Util.TAG, "Failed to start recording loops", e)
@@ -108,15 +127,23 @@ object Cognitive3DManager {
     @JvmStatic
     fun pauseSession() {
         Log.d(Util.TAG, "Cognitive3D Session Paused")
+        val pause = synchronized(pauseLock) { ++pauseGeneration }
 
         // Stop recording loops
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
+        DeviceMonitor.stop()
+        AudioRecordingManager.stop(scope)
         stopFlushTimer()
 
         scope.launch {
             Serialization.serializeCustomEvents("c3d.pause", mapOf("ispaused" to true))
+            // Saved after the pause event, so a session ended at this pause never ends before it.
+            // Skipped if the session already resumed while this was waiting to run.
+            synchronized(pauseLock) {
+                if (pause == pauseGeneration) ExitReporter.onSessionPaused()
+            }
             // Record current state of dynamic objects before flushing
             DynamicManager.recordFinalDynamics()
             // Flush all pending data buffers immediately
@@ -131,6 +158,10 @@ object Cognitive3DManager {
     @JvmStatic
     fun resumeSession() {
         Log.d(Util.TAG, "Cognitive3D Session Resumed")
+        synchronized(pauseLock) {
+            pauseGeneration++
+            ExitReporter.onSessionResumed()
+        }
 
         val provider = platformProvider ?: return
 
@@ -141,6 +172,8 @@ object Cognitive3DManager {
             GazeManager.startGazeRecording(scope, headProvider, dynamicObjectProvider)
             DynamicManager.startDynamicRecording(scope, controllerProvider, dynamicObjectProvider)
             PerformanceMonitor.startMonitoring(scope)
+            DeviceMonitor.start(scope)
+            AudioRecordingManager.start(scope)
             startSensorProcessor()
             startFlushTimer()
         } catch (e: Exception) {
@@ -157,9 +190,13 @@ object Cognitive3DManager {
     {
         Log.d(Util.TAG, "Cognitive3D Session Ending")
 
+        CrashReporter.sessionActive = false
+        ExitReporter.onSessionEnd()
         GazeManager.stopGazeRecording()
         DynamicManager.stopDynamicRecording()
         PerformanceMonitor.stopMonitoring()
+        DeviceMonitor.stop()
+        AudioRecordingManager.stop(scope)
         stopFlushTimer()
 
         val endTime = System.currentTimeMillis().toDouble() / 1000.0
@@ -210,7 +247,7 @@ object Cognitive3DManager {
     /**
      * Gathers and sets hardware and application metadata for the session.
      *
-     * Sends raw device signals only — classification (device type, category,
+     * Sends raw device signals only. Classification (device type, category,
      * family) is computed downstream by the pipeline's Device Resolution
      * Service, so no pre-classified values may be added here (C3D-1737).
      */
@@ -235,7 +272,7 @@ object Cognitive3DManager {
         setSessionProperty("c3d.app.name", appName)
 
         // Device ID & raw identity signals
-        // Note: c3d.device.type is intentionally not sent — the pipeline derives it.
+        // Note: c3d.device.type is intentionally not sent; the pipeline derives it.
         setSessionProperty("c3d.deviceid", Serialization.userID)
         setSessionProperty("c3d.device.model", Build.MODEL ?: "Unknown")
         setSessionProperty("c3d.device.product", Build.PRODUCT ?: "Unknown")
@@ -252,6 +289,10 @@ object Cognitive3DManager {
 
         // Memory (bytes)
         setSessionProperty("c3d.device.memory", getTotalMemoryBytes(context))
+        setSessionProperty(
+            "c3d.device.screen.smallestWidthInDensityIndependentPixels",
+            getDefaultDisplaySmallestWidthDp(context)
+        )
 
         // GPU Info
         val gpuInfo = Util.getGpuInfo()
@@ -277,6 +318,14 @@ object Cognitive3DManager {
             packageManager.hasSystemFeature("android.hardware.xr.input.eye_tracking"))
         setSessionProperty("c3d.device.feature.vr",
             packageManager.hasSystemFeature("android.hardware.vr.headtracking"))
+        setSessionProperty("c3d.device.feature.leanback",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK))
+        setSessionProperty("c3d.device.feature.watch",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH))
+        setSessionProperty("c3d.device.feature.automotive",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE))
+        setSessionProperty("c3d.device.feature.pc",
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PC))
 
         // Capabilities
         // Deprecated: duplicate of c3d.device.model under a misleading name. Kept
@@ -286,6 +335,9 @@ object Cognitive3DManager {
         setSessionProperty("c3d.device.eyetracking.enabled", provider.isEyeTrackingAvailable())
         setSessionProperty("c3d.device.controllerinputs.enabled", detectControllerInputs(provider))
         setSessionProperty("c3d.app.handtracking.enabled", provider.isHandTrackingAvailable())
+        if (config?.enableAudioRecording == true) {
+            setSessionProperty("c3d.device.audio_tracking.enabled", AudioRecordingManager.isEnabled)
+        }
     }
 
     /**
@@ -311,6 +363,22 @@ object Cognitive3DManager {
             memoryInfo.totalMem
         } catch (e: Exception) {
             0L
+        }
+    }
+
+    /**
+     * Returns the built-in display panel's smaller side in density-independent pixels at the
+     * factory density, truncated to an integer, or 0 if it cannot be determined. Depends only
+     * on the panel's current mode, not on the app's window, task, display-size setting, or
+     * forced display size.
+     */
+    private fun getDefaultDisplaySmallestWidthDp(context: Context): Int {
+        return try {
+            val mode = context.getSystemService(DisplayManager::class.java)
+                ?.getDisplay(Display.DEFAULT_DISPLAY)?.mode ?: return 0
+            smallestWidthDp(mode.physicalWidth, mode.physicalHeight, DisplayMetrics.DENSITY_DEVICE_STABLE)
+        } catch (e: Exception) {
+            0
         }
     }
 
@@ -432,6 +500,16 @@ object Cognitive3DManager {
         trackable: Any? = null,
         id: String? = null
     ) {
+        // Checked per flavor via PlatformFactory, not the PlatformProvider: apps often register
+        // before the session (and so the provider) exists
+        if (!PlatformFactory.supportsDynamicObjects) {
+            if (!dynamicObjectsUnsupportedWarned) {
+                dynamicObjectsUnsupportedWarned = true
+                Log.w(Util.TAG, "Dynamic Objects aren't supported by this SDK build; '$name' and any later registrations are ignored. Use android-xr-sdk or meta-spatial-sdk for immersive apps.")
+            }
+            return
+        }
+
         for (obj in DynamicManager.dynamics) {
             if (obj.trackableRef != null && obj.trackableRef == trackable) {
                 Log.w(Util.TAG, "Dynamic Object Already Registered: $trackable")

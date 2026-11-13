@@ -351,7 +351,7 @@ object Serialization {
             val (key, value) = iter.next()
             if (!first) append(',')
             first = false
-            append('"').append(key).append("\":")
+            appendJsonString(key).append(':')
             appendJsonValue(value)
             iter.remove()
         }
@@ -361,6 +361,10 @@ object Serialization {
     private fun StringBuilder.appendJsonValue(value: Any?) {
         when (value) {
             is String -> appendJsonString(value)
+            is Char -> appendJsonString(value.toString())
+            // JSON has no NaN or Infinity, so they'd probably make the backend reject the request with a 400
+            is Double -> if (value.isFinite()) append(value) else append("null")
+            is Float -> if (value.isFinite()) append(value) else append("null")
             is Number, is Boolean -> append(value)
             null -> append("null")
             else -> appendJsonString(value.toString())
@@ -440,6 +444,65 @@ object Serialization {
         return eventBuilder.toString()
     }
 
+    /** Identifies a session so data can still be sent for it after its process is gone. */
+    data class SessionRecord(
+        val sessionId: String,
+        val userId: String,
+        val sessionTimestamp: Double,
+        val eventUrl: String,
+        val gazeUrl: String
+    )
+
+    fun currentSessionRecord() = SessionRecord(sessionID, userID, sessionTimestamp, eventURL, gazeURL)
+
+    /**
+     * Sends events (name to properties) for an earlier session in one payload, e.g. its end at
+     * the next launch. Uses a high part number that can't collide with parts already sent.
+     */
+    suspend fun sendPastSessionEvents(record: SessionRecord, events: List<Pair<String, Map<String, Any?>>>, eventTime: Double) {
+        val payload = StringBuilder(512).apply {
+            append("{\"data\":[")
+            events.forEachIndexed { index, (category, properties) ->
+                if (index > 0) append(',')
+                append('{')
+                appendKeyValue("name", category)
+                appendKeyValue("time", eventTime)
+                append("\"point\":[0,0,0]")
+                if (properties.isNotEmpty()) {
+                    append(",\"properties\":{")
+                    appendProperties(properties)
+                    append('}')
+                }
+                append('}')
+            }
+            append("],")
+            appendKeyValue("userid", record.userId)
+            appendKeyValue("timestamp", record.sessionTimestamp.toLong())
+            appendKeyValue("sessionid", record.sessionId)
+            appendKeyValue("part", PAST_SESSION_PART)
+            append("\"formatversion\":\"1.0\"}")
+        }.toString()
+        NetworkManager.send(record.eventUrl, payload)
+    }
+
+    /** Sets session properties (e.g. tags) on an earlier session. See [sendPastSessionEvents]. */
+    suspend fun sendPastSessionProperties(record: SessionRecord, properties: Map<String, Any?>) {
+        val payload = StringBuilder(256).apply {
+            append("{\"data\":[],")
+            appendKeyValue("userid", record.userId)
+            appendKeyValue("sessionid", record.sessionId)
+            appendKeyValue("timestamp", record.sessionTimestamp.toLong())
+            appendKeyValue("part", PAST_SESSION_PART)
+            appendKeyValue("interval", SNAPSHOT_INTERVAL)
+            append("\"formatversion\":\"1.0\",\"properties\":{")
+            appendProperties(properties)
+            append("}}")
+        }.toString()
+        NetworkManager.send(record.gazeUrl, payload)
+    }
+
+    private const val PAST_SESSION_PART = 10_000
+
     suspend fun serializeCustomEvents(category: String?, properties: Map<String, Any?>, pose: PoseData? = null) {
         if (!isInitialized) {
             initializationMutex.withLock {
@@ -487,7 +550,7 @@ object Serialization {
     }
 
     private fun StringBuilder.appendKeyValue(key: String, value: Any?) {
-        append('"').append(key).append("\":")
+        appendJsonString(key).append(':')
         appendJsonValue(value)
         append(',')
     }
@@ -497,7 +560,7 @@ object Serialization {
         for ((key, value) in properties) {
             if (!first) append(',')
             first = false
-            append('"').append(key).append("\":")
+            appendJsonString(key).append(':')
             appendJsonValue(value)
         }
     }
@@ -519,12 +582,12 @@ object Serialization {
 
     private fun recordDynamicManifestInternal(id: String, name: String, meshName: String, isController: Boolean, controllerType: String) {
         if (dynamicManifestBuilder.isNotEmpty()) dynamicManifestBuilder.append(',')
-        dynamicManifestBuilder.append('"').append(id).append("\":{")
-        dynamicManifestBuilder.append("\"name\":\"").append(name).append("\",")
-        dynamicManifestBuilder.append("\"mesh\":\"").append(meshName).append("\",")
+        dynamicManifestBuilder.appendJsonString(id).append(":{")
+        dynamicManifestBuilder.append("\"name\":").appendJsonString(name).append(',')
+        dynamicManifestBuilder.append("\"mesh\":").appendJsonString(meshName).append(',')
         dynamicManifestBuilder.append("\"fileType\":\"gltf\"")
         if (isController) {
-            dynamicManifestBuilder.append(",\"controllerType\":\"").append(controllerType).append("\"")
+            dynamicManifestBuilder.append(",\"controllerType\":").appendJsonString(controllerType)
         }
         dynamicManifestBuilder.append('}')
     }
@@ -538,7 +601,7 @@ object Serialization {
         val payload = dynamicMutex.withLock {
             if (dynamicCount > 0) dynamicBuilder.append(',')
             dynamicBuilder.apply {
-                append("{\"id\":\"").append(id).append("\",")
+                append("{\"id\":").appendJsonString(id).append(',')
                 append("\"time\":").append(time).append(",")
                 append("\"p\":[")
                 appendFloat(px).append(',')
@@ -595,7 +658,13 @@ object Serialization {
 
     suspend fun recordSensor(category: String, value: Float, timestamp: Double) {
         if (!isInitialized) return
-        
+        // Dropped rather than sent: appendFloat would write NaN as 0 and Infinity as ±99999,
+        // which would show up as real readings
+        if (!value.isFinite()) {
+            Util.logWarning("Ignoring non-finite reading ($value) for sensor $category")
+            return
+        }
+
         val payload = sensorMutex.withLock {
             initializeSensor(category, 10f)
             

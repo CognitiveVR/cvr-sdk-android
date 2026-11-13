@@ -32,6 +32,11 @@ android {
             dimension = "platform"
             buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"meta.spatial.sdk\"")
         }
+        // Plain Android (phones, tablets, RealWear): no XR runtime, sensor-based 3DoF orientation
+        create("android") {
+            dimension = "platform"
+            buildConfigField("String", "XR_RUNTIME_PACKAGE", "\"none\"")
+        }
     }
 
     sourceSets {
@@ -43,6 +48,9 @@ android {
         }
         getByName("metaSpatial") {
             java.srcDirs("src/metaSpatial/java")
+        }
+        getByName("android") {
+            java.srcDirs("src/android/java")
         }
     }
 
@@ -72,6 +80,9 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.capnproto:runtime:0.1.16")
+
+    testImplementation("junit:junit:4.13.2")
 
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
@@ -97,13 +108,28 @@ fun getProperty(key: String, default: String = ""): String {
     return providers.gradleProperty(key).getOrElse(default)
 }
 
-// Determine which flavor to publish (pass -PFLAVOR=androidXr or -PFLAVOR=metaSpatial)
+// Determine which flavor to publish (pass -PFLAVOR=androidXr, -PFLAVOR=metaSpatial or -PFLAVOR=android)
 val flavorToBuild = providers.gradleProperty("FLAVOR").getOrElse("androidXr")
+require(flavorToBuild in listOf("androidXr", "metaSpatial", "android")) {
+    "Unknown FLAVOR '$flavorToBuild'. Use androidXr, metaSpatial or android."
+}
 
 mavenPublishing {
     val artifactId = when (flavorToBuild) {
         "metaSpatial" -> "meta-spatial-sdk"
-        else -> "android-xr-sdk"
+        "androidXr" -> "android-xr-sdk"
+        else -> "android-sdk"
+    }
+    // Name and description shown on Maven Central for this flavor
+    val pomName = when (flavorToBuild) {
+        "metaSpatial" -> "Cognitive3D Meta Spatial SDK"
+        "androidXr" -> "Cognitive3D Android XR SDK"
+        else -> "Cognitive3D Android SDK"
+    }
+    val pomDescription = when (flavorToBuild) {
+        "metaSpatial" -> "Analytics and insights SDK for Meta Spatial SDK applications on Meta Quest"
+        "androidXr" -> "Analytics and insights SDK for Android XR applications"
+        else -> "Analytics and insights SDK for Android phone and tablet applications"
     }
 
     coordinates(
@@ -119,8 +145,8 @@ mavenPublishing {
     ))
 
     pom {
-        name.set(getProperty("POM_NAME"))
-        description.set(getProperty("POM_DESCRIPTION"))
+        name.set(pomName)
+        description.set(pomDescription)
         inceptionYear.set(getProperty("POM_INCEPTION_YEAR"))
         url.set(getProperty("POM_URL"))
 
