@@ -2,6 +2,14 @@ package com.cognitive3d.android
 
 import android.app.Activity
 
+/** +Y up and +X right in both; they differ in which way is forward (and so in handedness). */
+enum class CoordinateConvention {
+    /** OpenXR / Jetpack XR: right-handed, -Z forward. */
+    RIGHT_HANDED_NEG_Z_FORWARD,
+    /** Meta Spatial SDK (and Unity): left-handed, +Z forward. */
+    LEFT_HANDED_POS_Z_FORWARD
+}
+
 /**
  * Abstraction layer for platform-specific XR functionality.
  * Each supported platform (Android XR, Meta Spatial) provides its own implementation.
@@ -30,6 +38,8 @@ interface PlatformProvider {
      * or scene), so the session must end when that activity is destroyed even if others remain.
      */
     fun isBoundToHostActivity(): Boolean = true
+    /** Axis convention of the poses this platform's tracking providers return (used to feed simulated poses in the same space). */
+    fun getCoordinateConvention(): CoordinateConvention = CoordinateConvention.RIGHT_HANDED_NEG_Z_FORWARD
     /** Releases platform-specific resources. */
     fun destroy()
 }

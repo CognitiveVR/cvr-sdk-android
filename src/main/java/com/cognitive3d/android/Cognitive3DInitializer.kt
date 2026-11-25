@@ -151,7 +151,7 @@ class Cognitive3DInitializer : ContentProvider() {
                 }
 
                 private fun getOrCreateProvider(activity: Activity): PlatformProvider {
-                    return platformProvider ?: PlatformFactory.create(activity).also { platformProvider = it }
+                    return platformProvider ?: XRSimPlatformProvider.wrap(PlatformFactory.create(activity)).also { platformProvider = it }
                 }
 
                 // Platform-independent, so requested here rather than via PlatformProvider.
@@ -168,7 +168,7 @@ class Cognitive3DInitializer : ContentProvider() {
 
                 private fun initializePlatform(activity: Activity) {
                     try {
-                        val provider = PlatformFactory.create(activity)
+                        val provider = XRSimPlatformProvider.wrap(PlatformFactory.create(activity))
                         if (provider.initialize(activity)) {
                             platformProvider = provider
                             hostActivity = activity

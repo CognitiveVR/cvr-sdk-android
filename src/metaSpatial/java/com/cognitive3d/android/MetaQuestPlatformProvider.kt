@@ -62,6 +62,9 @@ class MetaQuestPlatformProvider : PlatformProvider {
                 PackageManager.PERMISSION_GRANTED
     }
 
+    // Spatial SDK: Pose.forward() is q * (0,0,+1) and Pose.right() is +X, i.e. left-handed, +Z forward.
+    override fun getCoordinateConvention(): CoordinateConvention = CoordinateConvention.LEFT_HANDED_POS_Z_FORWARD
+
     override fun destroy() {
         sessionActive = false
     }

@@ -32,6 +32,9 @@ class AndroidPlatformProvider : PlatformProvider {
     // can outlive the activity it started in (multi-activity phone and tablet apps)
     override fun isBoundToHostActivity(): Boolean = false
 
+    // SensorHeadTrackingProvider converts to the SDK frame: X right, Y up, +Z forward (left-handed)
+    override fun getCoordinateConvention(): CoordinateConvention = CoordinateConvention.LEFT_HANDED_POS_Z_FORWARD
+
     override fun destroy() {
         headTrackingProvider?.stop()
         headTrackingProvider = null
